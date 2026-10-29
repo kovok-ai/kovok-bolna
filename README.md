@@ -105,9 +105,19 @@ Ensure `.env` contains:
 NODE_ENV=development
 PORT=3000
 APP_URL=http://localhost:3000
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/kovok_dev?schema=public"
+DATABASE_URL="postgresql://kovok_app:your_app_password@localhost:5432/kovok_dev?schema=public"
+DIRECT_URL="postgresql://postgres:your_admin_password@localhost:5432/kovok_dev?schema=public"
 SESSION_SECRET="kovok_phase_1_foundation_super_secure_session_secret_2026_at_least_32_chars"
 ```
+
+> **Mandatory Security Rule (NOBYPASSRLS)**: The application runtime MUST connect as a dedicated non-superuser role (e.g. `kovok_app`) configured with `NOBYPASSRLS`:
+> ```sql
+> CREATE ROLE kovok_app WITH LOGIN PASSWORD 'your_app_password' NOBYPASSRLS;
+> GRANT USAGE ON SCHEMA public TO kovok_app;
+> GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO kovok_app;
+> GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO kovok_app;
+> ```
+> PostgreSQL superusers bypass Row-Level Security unconditionally. Never connect `DATABASE_URL` as a superuser!
 
 ---
 
@@ -122,15 +132,18 @@ npm run db:generate
 ```bash
 npm run db:migrate
 ```
-*Applies `prisma/migrations/20261030000000_init/migration.sql`, establishing 12 tables and PostgreSQL Row-Level Security policies.*
+*Applies two sequential canonical migrations:*
+1. `20261030000000_init/migration.sql`: Establishes 12 core tables, unique constraints, foreign keys, and initial RLS policies.
+2. `20261030000001_security_and_invariants/migration.sql`: Completes `FORCE ROW LEVEL SECURITY` on `workspace_roles`, `workspace_memberships`, and `sessions`, and establishes PostgreSQL triggers (`trg_check_approval_allocation_limit` with `FOR UPDATE` lock and `trg_check_approval_quantity_reduction`) enforcing the split-allocation quantity invariant ($\sum \text{allocated} \le \text{approved}$).
 
 ### 4.3 Seed Development Fixtures
 ```bash
 npm run db:seed
 ```
-*Seeds dynamic GST tax rate rules (cement pre/post-rationalisation and steel) and default development workspace "Concrete & Co." with admin user `admin@concrete-co.in` / `AdminSecurePass#2026`.*
+*Seeds dynamic GST tax rate rules (flagged as Draft pending gazette sign-off) and default development workspace "Concrete & Co." with admin user `shiwang@concreteandco.in` / `KovokSecure2026!`.*
 
 > **Production Safety Guard**: The seed script checks `process.env.NODE_ENV === 'production'` and immediately aborts with a fatal error if executed in production.
+
 
 ---
 

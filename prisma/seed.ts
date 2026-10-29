@@ -1,12 +1,15 @@
 import { PrismaClient } from '@prisma/client';
 import * as crypto from 'crypto';
 
+import { promisify } from 'util';
+
+const scryptAsync = promisify(crypto.scrypt);
 const prisma = new PrismaClient();
 
 // Scrypt password hashing matching application auth
-export function hashPassword(password: string): string {
+export async function hashPassword(password: string): Promise<string> {
   const salt = crypto.randomBytes(16).toString('hex');
-  const derivedKey = crypto.scryptSync(password, salt, 64);
+  const derivedKey = (await scryptAsync(password, salt, 64)) as Buffer;
   return `${salt}:${derivedKey.toString('hex')}`;
 }
 
@@ -17,6 +20,7 @@ async function main() {
   }
 
   console.log('Seeding initial reference data and development fixtures...');
+
 
   // 1. Seed Dynamic Tax Rate Rules (Historical & Current GST Rationalisation)
   const cementOld = await prisma.taxRateRule.upsert({
@@ -130,8 +134,9 @@ async function main() {
   });
 
   // 4. Seed Development Admin User
-  const adminPasswordHash = hashPassword('KovokSecure2026!');
+  const adminPasswordHash = await hashPassword('KovokSecure2026!');
   const adminUser = await prisma.user.upsert({
+
     where: { email: 'shiwang@concreteandco.in' },
     update: {},
     create: {

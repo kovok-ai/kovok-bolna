@@ -1,8 +1,14 @@
 """
-Kovok Construction UI — Portable Smoke Test Harness
-Cross-platform compatible (Windows, Linux, macOS)
-Does not hardcode /usr/bin/chromium or /mnt/data Linux paths.
+Kovok Construction UI — Baseline HTML Prototype Smoke Test Harness
+Cross-platform compatible (Windows, Linux, macOS).
+
+IMPORTANT AUDIT NOTE:
+This script specifically tests the baseline HTML prototype (Kovok_Construction_UI_Premium/index.html)
+to verify that the original visual tokens, CSS layout, and navigation structure remain preserved.
+It does NOT test the Next.js / React App Router web application.
+Application foundation, server-side auth, and multi-tenant RLS tests are executed via `npm test`.
 """
+
 
 import sys
 import os

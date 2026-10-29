@@ -60,6 +60,9 @@ export async function POST(req: NextRequest) {
         },
       });
 
+      // Establish transaction-local workspace tenant context for RLS policy enforcement
+      await tx.$executeRawUnsafe(`SET LOCAL app.current_workspace_id = '${workspace.id}';`);
+
       // b. Create Roles
       const ownerRole = await tx.workspaceRole.create({
         data: {
@@ -88,15 +91,17 @@ export async function POST(req: NextRequest) {
       });
 
       // c. Create User
+      const hashedPassword = await hashPassword(password);
       const user = await tx.user.create({
         data: {
           name: adminName.trim(),
           email: normalizedEmail,
-          passwordHash: hashPassword(password),
+          passwordHash: hashedPassword,
           phone: phone?.trim(),
           status: 'ACTIVE',
         },
       });
+
 
       // d. Create Membership
       await tx.workspaceMembership.create({
