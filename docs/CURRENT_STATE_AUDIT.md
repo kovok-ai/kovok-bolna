@@ -1,8 +1,8 @@
-# Kovok — Current State Technical & Domain Audit (Amended)
+# Kovok — Current State Technical & Domain Audit (Amended & Corrected)
 
 **Document Status:** Amended Technical Audit  
 **Author:** Lead Software Engineer  
-**Date:** October 30, 2026 (Amended)  
+**Date:** October 30, 2026 (Revision 2)  
 **Target Environment:** Production Construction Procurement (Indian Market)
 
 ---
@@ -16,10 +16,13 @@ Kovok is an AI-powered procurement operations platform for construction material
 ### Core Domain Invariant
 > **Strict Business Rule:** The buyer pays the supplier directly. Kovok is an operations and intelligence layer; it does not escrow or hold buyer funds, and it **must never place an order or commit commercial terms without verified, explicit buyer authorization**.
 
-### Current Baseline
+### Current Baseline & Project State
 The audited repository contains an HTML/CSS/JS frontend concept prototype (`Kovok_Construction_UI_Premium/index.html`), screen specifications (`UI_SCREEN_SPEC.md`), business onboarding guidelines (`ONBOARDING_QUESTIONS.md`), UI screenshots, and a Linux-based Playwright smoke test (`check_ui.py`).
 
 While the prototype delivers a clean, restrained, table-first design inspired by industrial procurement systems (ERPNext, SAP Ariba, Procore, JSW One MSME), **it is strictly a client-side mockup**. All data is hardcoded in memory, no server or database exists, interactive forms do not persist, voice integrations are static buttons, and no security or multi-tenancy controls are implemented.
+
+### Readiness Status
+> **Implementation Readiness:** Foundation work may begin; production integrations and launch have unresolved prerequisites (including live Sarvam credentials and verified test, webhook authentication confirmation, hosting/database provisioning, current standards and tax verification with a qualified adviser, legal/privacy review of calling rules, and catalogue data/image rights verification).
 
 ---
 
@@ -32,7 +35,7 @@ Kovok_Construction_UI_Premium/
 │   ├── ARCHITECTURE_DECISIONS.md        # Technical architecture specifications
 │   └── IMPLEMENTATION_PLAN.md           # Phased roadmap and acceptance criteria
 ├── .env.example                         # Environment configuration template
-├── Kovok_Construction_UI_Premium/        # Original prototype package (baseline preserved)
+├── Kovok_Construction_UI_Premium/        # Original prototype package (baseline preserved on master)
 │   ├── index.html                       # Single-file HTML/CSS/JS prototype (83,949 bytes, 115 lines)
 │   ├── UI_SCREEN_SPEC.md                # UI design direction and screen specs (7,099 bytes)
 │   ├── ONBOARDING_QUESTIONS.md          # Progressive onboarding questionnaire (9,897 bytes)
@@ -43,15 +46,15 @@ Kovok_Construction_UI_Premium/
 ```
 
 ### Target Runtime & Dependency Compatibility
-- **Runtime Environment:** Must target a currently supported LTS release. **Node.js 24.x LTS** is selected. (Note: Node.js 20 reached End-of-Life on 24 March 2026 and is strictly rejected).
-- **Framework:** **Next.js 16.0.x (Active LTS)** with React 19.x is selected. Pinned versions avoid compatibility drift and vague "15+" targets.
+- **Runtime Environment:** Target supported LTS releases. **Node.js 24.x LTS** is selected as the primary conservative LTS baseline (with compatibility verification for **Node.js 26 LTS**, which entered LTS on 28 October 2026). Node.js 20 reached End-of-Life on 24 March 2026 and is strictly rejected.
+- **Web Framework:** **Next.js 16.2.x (Active LTS)** with React 19.x. Exact resolved versions will be pinned in `package-lock.json` with patched dependencies verified via CI.
 
 ### File-by-File Technical Inspection
 
 | File | Purpose | Tech Stack | Production Readiness | Gaps Identified |
 | :--- | :--- | :--- | :--- | :--- |
 | `index.html` | Core UI prototype | Vanilla HTML5, CSS3, ES6 JS | **Concept Prototype Only** | Monolithic single file; all logic in `document.addEventListener`; zero backend communication; hardcoded in-memory fixtures. |
-| `check_ui.py` | UI test script | Python 3, Playwright | **Non-portable Script** | Hardcoded to Linux path `/mnt/data/Kovok_Construction_UI_Premium` and `/usr/bin/chromium`; fails on Windows/Mac without local Chromium configuration. |
+| `check_ui.py` | UI test script | Python 3, Playwright | **Non-portable Script** | Hardcoded to Linux path `/mnt/data/Kovok_Construction_UI_Premium` and `/usr/bin/chromium`; fails on Windows/Mac environments without local Chromium configuration. |
 | `UI_SCREEN_SPEC.md` | Specification | Markdown | **High Value Reference** | Lacks API contracts, HTTP response schemas, and error state specifications. |
 | `ONBOARDING_QUESTIONS.md` | Onboarding spec | Markdown | **High Value Reference** | Lacks formal JSON schema definitions for workspace rule generation. |
 | `preview_gallery.html` | Visual asset | Static HTML/CSS | **Documentation Only** | Visual artifact showcasing pre-rendered PNGs. |
@@ -60,7 +63,7 @@ Kovok_Construction_UI_Premium/
 
 ## 3. Comprehensive Sample Data Audit
 
-Every data structure rendered in the UI is hardcoded in memory within `index.html`. Below is the complete catalog of hardcoded fixtures:
+Every data structure rendered in the UI is hardcoded in memory within `index.html`:
 
 ### 3.1 Client State Object (`index.html:L61`)
 ```javascript
@@ -187,7 +190,7 @@ const requests = [
 | **Requests Screen** | Import Button | Opens CSV/Excel file upload wizard. | **Placeholder:** Displays an informational modal with mock text. | Implement multipart upload API with preview & column mapping. |
 | **Requests Screen** | Row Action `Open ->` | Opens full procurement request details. | **Placeholder:** Opens static `infoModal('open-request')`. | Create full-page / drawer view with quote history, audit timeline, and live status. |
 | **Quotations Screen** | Table Actions (`Clarify`, `Review`) | Initiates supplier clarification call/message; prepares approval packet. | **Placeholder:** Triggers static mock modal or toast. | Implement Sarvam voice clarification dispatch and approval workflow triggers. |
-| **Quotations Screen** | `Select for approval` | Submits selected quote to authorized buyer for formal signoff. | **Placeholder:** Displays `approve-quote` static modal. | Create formal Approval entity with versioned quote snapshot and cryptographic/session token. |
+| **Quotations Screen** | `Select for approval` | Submits selected quote to authorized buyer for formal signoff. | **Placeholder:** Displays `approve-quote` static modal. | Create formal Approval and Allocation entities with versioned quote snapshot. |
 | **Orders Screen** | Export Button | Downloads CSV/PDF of active purchase orders. | **Placeholder:** Displays static `infoModal('export-orders')`. | Implement streaming CSV/PDF generation endpoint. |
 | **Orders Screen** | Filter Dropdown | Filters orders by status (`At risk`, `Awaiting receipt`). | **Broken:** No event listener attached. | Implement reactive status filtering. |
 | **Product Catalogue** | Search & Filters | Searches items by IS standard, brand, SKU, and category. | **Broken:** Input and selects are un-wired. | Connect to catalogue query API with attribute facet filtering. |
@@ -201,17 +204,22 @@ const requests = [
 
 ---
 
-## 5. Construction Domain & Standards Realities
+## 5. Construction Domain & Standards Reference Data
 
 ### 5.1 Standards Reference Data (IS 1786 & Cement)
 - **TMT Reinforcement Steel (IS 1786:2008):**
-  - Official BIS standard specifies grades: `Fe 415`, `Fe 415D`, `Fe 500`, `Fe 500D`, `Fe 550`, `Fe 550D`, and `Fe 600`.
-  - Nominal diameters: `4, 5, 6, 7, 8, 9, 10, 12, 16, 20, 25, 28, 32, 36, 40, 45, 50 mm`.
-  - **Draft Standards:** BIS published a 2025 draft revision of IS 1786. *Rule:* Draft standards must be stored as versioned reference data with status `DRAFT_UNDER_REVIEW`. They must **never** be activated as binding production standards until officially promulgated and published in the Gazette of India.
+  - BIS product manuals (Revision 3) and BIS LIMS listings for IS 1786:2008 document multiple designations including:
+    - Standard grades: `Fe 415, Fe 500, Fe 550, Fe 600`.
+    - Ductile ("D") grades for earthquake-resistant design: `Fe 415D, Fe 500D, Fe 550D`.
+    - Seismic ("S") grades: `Fe 415S, Fe 500S`.
+    - Higher strength variants: `Fe 650, Fe 700`.
+  - Nominal sizes listed in BIS product manuals: `4, 5, 6, 8, 10, 12, 16, 20, 25, 28, 32, 36, 40, 45, 50 mm`, with provisions that other sizes may be mutually agreed between purchaser and manufacturer.
+  - *Architectural Rule:* The word "exhaustive" is strictly removed from enum claims. Grade/designation and nominal size must be represented as **source-backed reference data** (`material_grades`, `material_nominal_sizes`) recording standard version, status, and scope limitations. Non-listed/custom sizes are permitted only as buyer/supplier-confirmed values subject to review.
+  - **Draft Standards:** BIS published a 2025 draft revision of IS 1786. Draft standards are recorded as versioned reference data in draft status and must **never** be activated as binding production standards until officially approved and gazetted by BIS.
 - **Documentation & Mill Test Certificates (MTC):**
   - Quality documentation (such as MTC with heat numbers, chemical composition, and yield strength) must **not** be globally hardcoded as an unconditional requirement.
-  - Requirement for MTC derives from:
-    1. Applicable IS standard requirements.
+  - MTC requirement derives from:
+    1. Applicable standard clauses.
     2. Buyer/project engineering specifications (e.g., CPWD, NHAI, DMRC, or private structural consultants).
     3. Purchase contract clauses.
     4. Configured project site receiving policy.
@@ -221,12 +229,13 @@ const requests = [
 
 ### 5.2 Dynamic Tax Architecture & GST Rationalisation
 - **GST Rate Reality:**
-  - **Cement GST Rate Change:** On 22 September 2025, the Government of India reduced cement GST from 28% to 18% under comprehensive GST rationalisation (PIB Press Release).
-  - **Strict Architecture Rule:** Never hard-code global 18% or 28% tax rates. Tax rates must be resolved through an **effective-dated, source-backed tax configuration table** (`tax_rate_rules`):
+  - **Cement GST Rate Change:** On 22 September 2025, the Government of India reduced cement GST from 28% to 18% under comprehensive GST rationalisation (PIB Press Release PRID 2163560).
+  - **Strict Architecture Rule:** Never hard-code global 18% or 28% tax rates. Tax rates are resolved through an **effective-dated tax configuration table** (`tax_rate_rules`):
     - HSN 7214 (TMT steel): 18% GST (CGST 9% + SGST 9% or IGST 18%).
     - HSN 2523 (Cement): Historically 28% (pre-22 Sept 2025), currently 18% (post-22 Sept 2025).
-    - System must record transaction date, supplier-provided tax treatment, tax-inclusive vs tax-exclusive status, and jurisdiction.
-    - If tax classification or rate is ambiguous, the system must flag classification uncertainty for human review.
+  - Do not apply one GST rate across all components by default. Tax classification, tax-inclusive/exclusive pricing, freight/handling treatment, and place-of-supply (CGST+SGST vs IGST) may differ by invoice arrangement.
+  - Supplier quoted totals are recorded as *evidence*; Kovok's computed total is a *validation/comparison result*.
+  - Classification uncertainty is flagged for human review. HSN mappings and rates must be reviewed with a qualified Indian tax adviser before live invoicing.
 
 ---
 
@@ -239,9 +248,10 @@ The technical audit cross-referenced Sarvam AI's public developer documentation 
    - Sarvam's outbound webhook transmits: `attempt_id`, `status` (`completed`, `failed`, `in_progress`), `interaction_id`, `final_agent_variables` (extracted key-value pairs), `transcript` (multi-turn dialogue array), `error_message`, and user-provided `metadata`.
    - **No Documented HMAC Signature Header:** The public Sarvam documentation does **not** specify an `x-sarvam-signature` or HMAC-SHA256 signature contract.
    - **No Global Timestamp:** The payload does not include a root-level ISO event timestamp.
-2. **Defensive Webhook Security Architecture (Until Cryptographic Contract is Confirmed):**
-   - **Endpoint Tokenization:** Each tenant/environment uses a high-entropy secret path token (e.g. `POST /api/v1/webhooks/sarvam/events?token=${SARVAM_WEBHOOK_INGESTION_TOKEN}`) or secret Bearer token in webhook metadata.
-   - **Strict Correlation:** Webhook callbacks are accepted **only** if the incoming `attempt_id` matches an open, active call attempt initiated by Kovok. Un-correlated callbacks are immediately logged as suspicious and discarded.
+2. **Defensive Webhook Security Architecture:**
+   - **Endpoint Tokenization & Logging Safeguard:** If an endpoint secret token is used (`POST /api/v1/webhooks/sarvam/events?token=...`), the token must be rotated, and query parameters / path tokens must be strictly redacted from application, proxy, and observability logs.
+   - **Strict Correlation:** Webhook callbacks are accepted **only** if the incoming `attempt_id` matches an open, active call attempt initiated by Kovok. Un-correlated callbacks are immediately logged as suspicious and dropped.
+   - **Persistence Before Acknowledgment:** The incoming webhook event is persisted in `webhook_events` before returning HTTP 200; domain processing is enqueued transactionally via the outbox worker.
    - **Server-Side Verification:** Upon receiving a callback, Kovok optionally verifies status by querying Sarvam's Outbound Call API (`GET /voice-agents/outbound/:attempt_id`).
    - **Deduplication:** Deduped via `attempt_id` and internal call correlation.
    - **State Machine Protection:** Protect status transitions against out-of-order callbacks (`INITIATED` $\rightarrow$ `RINGING` $\rightarrow$ `COMPLETED`).
@@ -252,18 +262,37 @@ The technical audit cross-referenced Sarvam AI's public developer documentation 
 ## 7. Authentication, Multi-Tenancy & Order Integrity Gaps
 
 1. **Authentication Strategy:**
-   - Instead of a hybrid JWT + session system, implement **one primary strategy**: Secure server-side sessions with `HttpOnly`, `Secure`, and `SameSite=Lax/Strict` cookies using a battle-tested library. JWTs are reserved exclusively for external machine-to-machine API integrations.
-2. **PostgreSQL RLS & Connection Pool Bleed:**
-   - Setting session-level variables (`SET app.current_workspace_id = ...`) in pooled database connections (PgBouncer) can cause tenant leakage across reused connections.
-   - *Fix:* Must use **transaction-local settings** (`SET LOCAL app.current_workspace_id = ...`) within atomic database transactions and verify with cross-tenant isolation test cases.
-3. **Duplicate Order Prevention & Split Fulfillment:**
-   - A single `UNIQUE (quotation_id)` database constraint is overly restrictive because it forbids legitimate split orders (e.g. 20 tonnes required, Supplier A fulfills 12 tonnes on PO-1; balance 8 tonnes fulfilled via PO-2).
-   - *Fix:* Enforce business invariant: **One order submission per approved approval record / approval version** (`UNIQUE (approval_id)`), combined with client-supplied submission idempotency keys.
-4. **Lean Modular Monolith & Job Engine:**
-   - Prefer a **PostgreSQL-backed transactional job worker** (e.g., Graphile Worker or Pg-Boss) for call scheduling and retries. This ensures outbox jobs are committed in the exact same ACID transaction as the procurement state, avoiding external Redis dependencies unless high-throughput rate-limiting explicitly requires it.
+   - Single primary strategy: Secure server-side sessions with `HttpOnly`, `Secure`, and `SameSite=Lax` cookies using a maintained session library. JWTs are reserved exclusively for external machine-to-machine API integrations.
+2. **PostgreSQL RLS, App Roles & Background Job Context:**
+   - RLS is ineffective if the application connects as a superuser, table owner, or `BYPASSRLS` role.
+   - *Fix:* Must use a least-privilege app role, apply `FORCE ROW LEVEL SECURITY` on tenant tables, and enforce **transaction-local settings** (`SET LOCAL app.current_workspace_id = ...`) within atomic database transactions.
+   - Background jobs and webhooks must resolve tenant ownership from **trusted internal call records**, never from untrusted external webhook metadata alone.
+3. **Split Fulfillment vs Unique Constraints:**
+   - A single `UNIQUE (quotation_id)` or `UNIQUE (approval_id)` on `purchase_orders` prevents legitimate split orders (e.g. 20 tonnes required, Supplier A fulfills 12 tonnes on PO-1; Supplier B fulfills 8 tonnes on PO-2).
+   - *Fix:* Represent buyer approval and supplier allocations separately:
+     - `Approval` records the buyer's approved plan and overall quantity ceiling.
+     - `ApprovalAllocation` records the authorized supplier, quantity, and commercial terms for each split.
+     - `PurchaseOrder` references a unique `approval_allocation_id`: `UNIQUE (approval_allocation_id)`.
+     - Request retries are guarded by `UNIQUE (workspace_id, idempotency_key)`.
+4. **Consistency Checksum vs Immutability:**
+   - A SHA-256 hash stored beside an editable PO is a **consistency checksum**, not a cryptographic signature or non-repudiation mechanism.
+   - Immutability is enforced through application state machine guards, restricted DB roles preventing updates to confirmed POs, and an append-only `audit_logs` table.
+5. **Lean Modular Monolith (Redis Removed for Phase 1):**
+   - Phase 1 avoids Redis. The modular monolith uses **PostgreSQL-backed transactional jobs** (Graphile Worker / Pg-Boss) for call scheduling and retries, ensuring jobs are committed in the *same ACID transaction* as the procurement state.
+   - Database transactions, row locking (`SELECT FOR UPDATE`), and unique constraints are the authoritative controls for purchase authorization. Redis will be revisited only if future load/latency requirements justify it.
+6. **Configurable Data Retention & Calling Policy:**
+   - The proposed 90-day transcript retention is a **proposed product default**, not a statutory default.
+   - Retention must be configurable by tenant and purpose.
+   - Complete legal/privacy review of supplier calls, AI disclosure, recording, opt-out handling, and applicable calling restrictions before production launch.
 
 ---
 
 ## 8. Conclusion & Action Items
 
-This amended audit provides the factual, verified foundation for the revised architecture decisions in `docs/ARCHITECTURE_DECISIONS.md` and implementation phases in `docs/IMPLEMENTATION_PLAN.md`.
+This corrected audit establishes the ground truth for Phase 1 foundation work.
+
+**Immediate Next Steps:**
+1. Reflect these corrections in `docs/ARCHITECTURE_DECISIONS.md` and `docs/IMPLEMENTATION_PLAN.md`.
+2. Update `.env.example` to remove Redis dependencies and reflect token logging safeguards.
+3. Commit corrections on branch `amend-audit-and-architecture`.
+4. Await leadership review before beginning Phase 1 foundation scaffolding.
