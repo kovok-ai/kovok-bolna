@@ -1,0 +1,278 @@
+// Kovok Construction Procurement — Production Foundation Schema
+// Database: PostgreSQL 16+
+// Design Invariant: Workspace-isolated, Transaction-local RLS, Split Allocations, Immutability via Checksum
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// -----------------------------------------------------------------------------
+// 1. WORKSPACE & TENANT ISOLATION
+// -----------------------------------------------------------------------------
+
+model Workspace {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String   @db.VarChar(255)
+  slug         String   @unique @db.VarChar(128)
+  businessType String   @db.VarChar(128) // 'Contractor / Builder', 'Material dealer', etc.
+  serviceArea  String   @db.VarChar(255) // 'Delhi NCR', 'Gurugram', etc.
+  isSandbox    Boolean  @default(false)
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  memberships      WorkspaceMembership[]
+  roles            WorkspaceRole[]
+  sites            ProjectSite[]
+  ruleProfiles     WorkspaceRuleProfile[]
+  approvals        Approval[]
+  allocations      ApprovalAllocation[]
+  purchaseOrders   PurchaseOrder[]
+  auditLogs        AuditLog[]
+  sessions         Session[]
+
+  @@map("workspaces")
+}
+
+model ProjectSite {
+  id                     String    @id @default(uuid()) @db.Uuid
+  workspaceId            String    @db.Uuid
+  siteName               String    @db.VarChar(255)
+  pinCode                String    @db.VarChar(6)
+  city                   String    @db.VarChar(128)
+  address                String    @db.Text
+  contactName            String?   @db.VarChar(128)
+  contactPhone           String?   @db.VarChar(32)
+  gateTimings            String?   @db.VarChar(128)
+  unloadingRestrictions String?   @db.Text
+  isActive               Boolean   @default(true)
+  createdAt              DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime  @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, pinCode])
+  @@map("project_sites")
+}
+
+// -----------------------------------------------------------------------------
+// 2. USERS, ROLES & PERMISSIONS
+// -----------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique @db.VarChar(255)
+  name         String   @db.VarChar(255)
+  passwordHash String   @db.VarChar(255)
+  phone        String?  @db.VarChar(32)
+  status       String   @default("ACTIVE") @db.VarChar(32) // 'ACTIVE', 'SUSPENDED'
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  memberships       WorkspaceMembership[]
+  sessions          Session[]
+  approvedApprovals Approval[]
+  auditLogs         AuditLog[]
+
+  @@map("users")
+}
+
+model WorkspaceRole {
+  id                  String   @id @default(uuid()) @db.Uuid
+  workspaceId         String   @db.Uuid
+  name                String   @db.VarChar(64) // 'OWNER', 'BUYER', 'APPROVER', 'SITE_ENGINEER', 'VIEWER'
+  description         String?  @db.Text
+  approvalLimitAmount Decimal? @db.Decimal(14, 2)
+  canCreateRequests   Boolean  @default(true)
+  canApproveQuotes    Boolean  @default(false)
+  canManageSettings   Boolean  @default(false)
+  canRecordReceipts   Boolean  @default(false)
+  createdAt           DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace   Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  memberships WorkspaceMembership[]
+
+  @@unique([workspaceId, name])
+  @@map("workspace_roles")
+}
+
+model WorkspaceMembership {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @db.Uuid
+  userId      String   @db.Uuid
+  roleId      String   @db.Uuid
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      WorkspaceRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@map("workspace_memberships")
+}
+
+// -----------------------------------------------------------------------------
+// 3. SERVER-SIDE SESSION AUTHENTICATION
+// -----------------------------------------------------------------------------
+
+model Session {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @db.Uuid
+  workspaceId  String    @db.Uuid
+  sessionToken String    @unique @db.VarChar(255)
+  expiresAt    DateTime  @db.Timestamptz(6)
+  ipAddress    String?   @db.VarChar(64)
+  userAgent    String?   @db.Text
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+  lastActiveAt DateTime  @default(now()) @db.Timestamptz(6)
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([sessionToken])
+  @@index([userId, workspaceId])
+  @@map("sessions")
+}
+
+// -----------------------------------------------------------------------------
+// 4. WORKSPACE PROCUREMENT RULES
+// -----------------------------------------------------------------------------
+
+model WorkspaceRuleProfile {
+  id                   String   @id @default(uuid()) @db.Uuid
+  workspaceId          String   @db.Uuid
+  categories           Json     // Array of category strings e.g. ["TMT Steel", "Cement"]
+  requestSource        String   @db.VarChar(128)
+  sourcingStrategy     String   @db.VarChar(128)
+  competitiveThreshold Decimal  @default(50000.00) @db.Decimal(14, 2)
+  maxVendorsPerRfq     Int      @default(3)
+  callWindowStart      String   @default("10:00") @db.VarChar(8)
+  callWindowEnd        String   @default("18:00") @db.VarChar(8)
+  callLanguage         String   @default("hi-IN") @db.VarChar(16)
+  maxRetries           Int      @default(2)
+  autoRetryUnanswered  Boolean  @default(true)
+  autoClarifyMissing   Boolean  @default(true)
+  allowSubstitutions   Boolean  @default(false)
+  status               String   @default("ACTIVE") @db.VarChar(32)
+  createdAt            DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("workspace_rule_profiles")
+}
+
+// -----------------------------------------------------------------------------
+// 5. DYNAMIC TAX RULES (GST Rationalisation Support)
+// -----------------------------------------------------------------------------
+
+model TaxRateRule {
+  id             String    @id @default(uuid()) @db.Uuid
+  hsnSacCode     String    @db.VarChar(16) // '7214' (Steel), '2523' (Cement)
+  description    String    @db.VarChar(255)
+  cgstRate       Decimal   @db.Decimal(5, 2)
+  sgstRate       Decimal   @db.Decimal(5, 2)
+  igstRate       Decimal   @db.Decimal(5, 2)
+  effectiveFrom  DateTime  @db.Date
+  effectiveTo    DateTime? @db.Date // NULL = currently active
+  sourceCitation String    @db.Text
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([hsnSacCode, effectiveFrom])
+  @@map("tax_rate_rules")
+}
+
+// -----------------------------------------------------------------------------
+// 6. APPROVALS, SPLIT ALLOCATIONS & ORDERS
+// -----------------------------------------------------------------------------
+
+model Approval {
+  id                     String   @id @default(uuid()) @db.Uuid
+  workspaceId            String   @db.Uuid
+  requestCode            String   @db.VarChar(64) // e.g. KOV-1028
+  approvedByUserId       String   @db.Uuid
+  totalApprovedQuantity  Decimal  @db.Decimal(12, 3)
+  quantityUnit           String   @db.VarChar(32) // 'tonnes', 'bags'
+  totalApprovedAmount    Decimal  @db.Decimal(14, 2)
+  approvedSpecifications Json     // Preserved specification parameters
+  approvalStatus         String   @default("APPROVED") @db.VarChar(32) // 'APPROVED', 'SUPERSEDED', 'CANCELLED'
+  createdAt              DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace  Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  approver   User                 @relation(fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  allocations ApprovalAllocation[]
+
+  @@index([workspaceId, requestCode])
+  @@map("approvals")
+}
+
+model ApprovalAllocation {
+  id                     String   @id @default(uuid()) @db.Uuid
+  approvalId             String   @db.Uuid
+  workspaceId            String   @db.Uuid
+  quotationReference     String   @db.VarChar(64)
+  supplierName           String   @db.VarChar(255)
+  allocatedQuantity      Decimal  @db.Decimal(12, 3)
+  allocatedPayableAmount Decimal  @db.Decimal(14, 2)
+  allocatedTermsSnapshot Json     // Full line-item breakdown snapshot
+  createdAt              DateTime @default(now()) @db.Timestamptz(6)
+
+  approval      Approval       @relation(fields: [approvalId], references: [id], onDelete: Cascade)
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  purchaseOrder PurchaseOrder?
+
+  @@index([workspaceId, approvalId])
+  @@map("approval_allocations")
+}
+
+model PurchaseOrder {
+  id                   String   @id @default(uuid()) @db.Uuid
+  workspaceId          String   @db.Uuid
+  poNumber             String   @db.VarChar(64) // e.g. PO-0261
+  approvalAllocationId String   @unique @db.Uuid // Exactly one PO per allocation (supports split orders)
+  idempotencyKey       String   @db.VarChar(128)
+  approvedTermsSnapshot Json    // Canonical approved terms snapshot
+  consistencyChecksum  String   @db.VarChar(64) // SHA-256 consistency checksum of approvedTermsSnapshot
+  poStatus             String   @default("CONFIRMED") @db.VarChar(32) // 'CONFIRMED', 'DISPATCHED', 'ARRIVED', 'INSPECTED', 'RECONCILED'
+  createdAt            DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace  Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  allocation ApprovalAllocation @relation(fields: [approvalAllocationId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, poNumber])
+  @@unique([workspaceId, idempotencyKey])
+  @@map("purchase_orders")
+}
+
+// -----------------------------------------------------------------------------
+// 7. IMMUTABLE AUDIT LOGS
+// -----------------------------------------------------------------------------
+
+model AuditLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  workspaceId   String   @db.Uuid
+  actorId       String?  @db.Uuid
+  action        String   @db.VarChar(64) // 'LOGIN', 'WORKSPACE_CREATED', 'APPROVAL_GRANTED', 'ORDER_CREATED'
+  entityType    String   @db.VarChar(64)
+  entityId      String   @db.VarChar(128)
+  payloadBefore Json?
+  payloadAfter  Json?
+  clientIp      String?  @db.VarChar(64)
+  userAgent     String?  @db.Text
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actor     User?     @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, action])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
