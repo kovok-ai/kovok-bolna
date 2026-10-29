@@ -1,361 +1,280 @@
-# Kovok — Production Architecture Decisions (ADR)
+# Kovok — Production Architecture Decisions (ADR) (Amended)
 
-**Document Status:** Approved Architecture Reference  
+**Document Status:** Amended Architecture Reference  
 **Author:** Lead Software Engineer  
-**Date:** October 30, 2026  
+**Date:** October 30, 2026 (Amended)  
 **Target Environment:** Production Construction Procurement (Indian Market)
 
 ---
 
 ## 1. Architectural Strategy & Guiding Principles
 
-Kovok transforms from a front-end UI concept into a production-grade enterprise procurement platform. Construction procurement in India is high-value, operationally complex, and error-sensitive:
-- Material orders routinely exceed ₹5,00,000 to ₹50,00,000 per transaction.
-- Product specifications (TMT ductility, cement grade) have direct structural engineering consequences.
-- Commercial quotes include volatile price components (basic rates, fluctuating freight, loading/unloading, 18%/28% GST).
+Kovok transforms from a front-end UI concept into a production-grade enterprise procurement platform for construction materials in India (TMT steel, cement, aggregates, RMC).
 
-### Guiding Principles
-1. **Practicality Over Unnecessary Microservices:** A unified, modular TypeScript architecture (modular monolith) avoids premature distributed systems complexity while maintaining clean domain boundaries.
-2. **Deterministic Commercial Integrity:** Kovok must calculate delivered costs deterministically. Calculations must never depend on non-deterministic LLM arithmetic.
-3. **Strict Human-in-the-Loop Authorization:** The buyer pays the supplier directly. Kovok provides negotiation intelligence and operational tracking, but **never executes a commercial commitment or places an order without verified buyer signoff**.
-4. **Resilient Asynchrony:** Phone calls, speech-to-text, webhook ingestion, and ERP synchronization must execute through fault-tolerant, idempotent background queues.
-5. **Data Residency & Compliance:** All buyer data, audio recordings, and commercial ledgers must remain compliant with India's Digital Personal Data Protection (DPDP) Act and reside in Indian cloud regions (e.g., Mumbai/Delhi).
+### Core Architectural Invariants
+1. **Practical Modular Monolith:** A unified, modular TypeScript codebase avoiding premature microservices overhead while maintaining strict domain separation (Catalog, Suppliers, Requests, Voice, Quotes, Approvals, Orders, Gate Receiving, Exceptions, Integrations).
+2. **Deterministic Commercial Integrity:** Kovok validates and compares quotes deterministically via mathematical models. Calculations never rely on non-deterministic LLM arithmetic.
+3. **Strict Human-in-the-Loop Authorization:** The buyer pays the supplier directly. Kovok is an operations and intelligence layer; it **never executes a commercial commitment or generates a Purchase Order without verified, explicit buyer authorization**.
+4. **Resilient Transactional Asynchrony:** Outbound calls, webhook processing, deadline alarms, and ERP sync are managed through durable, transactional background jobs.
+5. **India Data Residency & DPDP Compliance:** All buyer data, audio recordings, and commercial ledgers must comply with India's Digital Personal Data Protection (DPDP) Act. Cloud provider and region selection will be finalized based on verified data residency and latency in India.
 
 ---
 
-## 2. Technology Stack Selection
+## 2. Technology Stack & Runtime Specification
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
 │                          Web Browser (Client)                          │
-│   Next.js React Frontend · Custom Industrial UI · Web Audio API        │
+│   Next.js 16.0.x App Router · Custom Industrial UI · CSS Tokens        │
 └───────────────────────────────────┬────────────────────────────────────┘
-                                    │ HTTPS / WSS
+                                    │ HTTPS (Secure HttpOnly Session Cookies)
 ┌───────────────────────────────────▼────────────────────────────────────┐
 │                    Application & API Layer (Server)                    │
-│   Next.js App Router (Node.js 20+ TypeScript) · Zod Schemas            │
+│   Node.js 24.x LTS · Next.js 16.0.x (Active LTS) · Zod Contracts       │
 │   Domain Services: Catalog · Quotes · Approvals · Orders · Exceptions  │
 └──────────────┬────────────────────┬────────────────────┬───────────────┘
                │                    │                    │
 ┌──────────────▼─────┐ ┌────────────▼─────────┐ ┌────────▼──────────────┐
-│  PostgreSQL 16+    │ │    Redis 7 + BullMQ   │ │   Sarvam AI & Voice   │
-│  - Prisma / Drizzle│ │  - Async Call Queue  │ │  - Indic Speech/Voice │
-│  - Tenant RLS      │ │  - Webhook Retries   │ │  - Outbound Webhooks  │
-│  - Audit Logs      │ │  - Rate Limiters     │ │  - Telephony Gateway  │
+│  PostgreSQL 16+    │ │ PostgreSQL-backed    │ │   Sarvam AI Voice     │
+│  - Prisma / Drizzle│ │ Transactional Worker │ │  - Outbound Telephony │
+│  - Transaction RLS │ │ (Graphile / Pg-Boss) │ │  - Tokenized Webhooks │
+│  - Audit Trail     │ │ [Optional: Redis]    │ │  - Server Verification│
 └────────────────────┘ └──────────────────────┘ └───────────────────────┘
 ```
 
-| Component | Selected Technology | Justification & Architectural Fit |
+| Component | Pinned / Selected Technology | Architectural Rationale & Compatibility |
 | :--- | :--- | :--- |
-| **Frontend Framework** | **React 18+ with Next.js (App Router)** | Full-stack TypeScript architecture; server components ensure server secrets never leak to the client; server actions streamline form interactions; preserves custom CSS design tokens from the prototype. |
-| **Styling & Design System** | **Tailored CSS Modules / Vanilla CSS Tokens** | Preserves the calm, restrained industrial aesthetic developed in `index.html` (inter-spacing, table-first density, status chips, custom modal ergonomics) rather than degrading into a generic component library. |
-| **Server-Side API Layer** | **Next.js Route Handlers / Fastify Services** | Strict typing across API contracts using Zod; unified TypeScript types shared across frontend and backend; high-throughput async I/O. |
-| **Primary Database** | **PostgreSQL 16+ (AWS RDS / GCP Cloud SQL)** | ACID transactional guarantees for financial records; `pg_trgm` extension for full-text search across brands/SKUs/PIN codes; native JSONB for flexible category specifications; robust foreign-key constraints. |
-| **ORM & Migrations** | **Prisma ORM / Drizzle ORM** | Type-safe query building, declarative schema modeling, automated deterministic migration scripts, and seed controls. |
-| **Background Processing** | **BullMQ + Redis 7** | Reliable job queues for outbound call scheduling, webhook event retry processing, timeout monitors, and ERP synchronization. |
-| **Voice & Speech Engine** | **Sarvam AI Indic Telephony & LLM APIs** | Market-leading Hindi, Hinglish, and Indian English speech recognition and natural conversational voice generation tuned for Indian accents and trade vocabulary. |
-| **File / Object Storage** | **S3-Compatible Cloud Storage (GCS / S3 Mumbai)** | Secure, encrypted bucket storage for audio recordings, weighbridge challans, test certificates, and invoice snapshots with pre-signed URLs. |
+| **Runtime Environment** | **Node.js 24.x LTS** | Node.js 20 reached End-of-Life on 24 March 2026. Node.js 24 LTS is the current actively supported LTS runtime. |
+| **Web Framework** | **Next.js 16.0.x (Active LTS)** | Pinned to Next.js 16.0.x with React 19.x. Next.js 16 is Active LTS (Next.js 15 is Maintenance LTS). Server Components strictly prevent credentials from reaching client bundles. |
+| **Styling & UI Tokens** | **Tailored CSS Modules / Vanilla Tokens** | Retains the calm, industrial table-first layout from `index.html` (`--bg: #f7f8fa`, `--panel: #fff`, `--blue: #315c9b`, `--green: #236b4a`, `--amber: #855d1c`, etc.) without generic UI component library bloat. |
+| **Database & Persistence** | **PostgreSQL 16+** | ACID transactional guarantees; `pg_trgm` extension for fuzzy brand/SKU/PIN search; native JSONB for flexible specifications; transaction-local Row-Level Security (RLS). |
+| **ORM & Migrations** | **Prisma ORM / Drizzle ORM** | Declarative schema definitions, type-safe queries, deterministic forward migrations, and isolated development seeds. |
+| **Async Job Engine** | **PostgreSQL-backed Worker (Graphile Worker / Pg-Boss)** | Durability with transactional outbox pattern: jobs are committed in the *same database transaction* as domain state changes. Avoids external Redis dependency for core operations. Optional Redis may be introduced if distributed rate limiting requires it. |
+| **Voice & Speech Engine** | **Sarvam AI APIs** | Indian Indic conversational voice agents tuned for Hindi, Hinglish, and Indian English trade vocabulary. |
+| **Authentication** | **Server-side Sessions with HttpOnly Cookies** | Maintained session library (e.g. Lucia Auth or iron-session) utilizing secure, HttpOnly, SameSite=Lax cookies. JWTs are avoided for the primary web app and reserved exclusively for external machine API clients. |
+| **Object Storage** | **S3-Compatible Cloud Storage (India Region)** | Encrypted private bucket storage for weighbridge challans, test certificates, and invoice snapshots with pre-signed URLs. |
 
 ---
 
-## 3. Server-Side Secret Management
+## 3. Construction Domain & Dynamic Tax Architecture
 
-```
-┌────────────────────────────────────────────────────────┐
-│            GCP Secret Manager / AWS Secrets            │
-│  SARVAM_API_KEY · DB_PASSWORD · WEBHOOK_SECRET · JWT   │
-└───────────────────────────┬────────────────────────────┘
-                            │ Injected at Container Startup
-┌───────────────────────────▼────────────────────────────┐
-│                  Server Runtime (Node.js)              │
-│  - process.env parsed through server-only Zod config   │
-│  - Environment variables NEVER prefixed with NEXT_PUBLIC│
-│  - Client bundle contains ZERO credentials             │
-└────────────────────────────────────────────────────────┘
-```
+### 3.1 Versioned Standards Reference Data (IS 1786 & Cement)
+- **IS 1786:2008 (High Strength Deformed Steel Bars):**
+  - Canonical grades: `Fe 415`, `Fe 415D`, `Fe 500`, `Fe 500D`, `Fe 550`, `Fe 550D`, and `Fe 600`.
+  - Nominal diameters: `4, 5, 6, 7, 8, 9, 10, 12, 16, 20, 25, 28, 32, 36, 40, 45, 50 mm`.
+  - Nominal mass per meter tolerances: Governed by IS 1786 Table 1.
+  - **Draft Standards Handling:** BIS published a 2025 draft revision of IS 1786. *Architectural rule:* Draft standards are stored in `standard_revisions` with status `DRAFT_UNDER_REVIEW`. They must **never** be activated as binding production standards until officially promulgated in the Gazette of India.
+- **Documentation & Mill Test Certificates (MTC):**
+  - MTC is **not** an unconditional global prerequisite.
+  - MTC requirement is dynamic, derived from: (a) applicable standard clauses, (b) buyer/project engineering specifications, (c) purchase contract terms, or (d) site receiving policies.
+- **Cement Standards & Attributes:**
+  - Governed by **IS 269:2015** (OPC 33, 43, 53), **IS 1489:2015** (PPC), **IS 455** (PSC), and **IS 16415** (Composite).
+  - Bag size (50 kg HDPE, 25 kg, bulk tankers) and manufacturing freshness (batch week) are modeled as source-backed product/lot/order attributes and buyer policies.
 
-### Architectural Controls
-1. **Server/Client Boundary:** No API credentials or signing secrets may use the `NEXT_PUBLIC_` prefix. Environment configuration is parsed in a dedicated `server/config.ts` module using Zod:
-   ```typescript
-   import { z } from 'zod';
-   
-   const serverConfigSchema = z.object({
-     DATABASE_URL: z.string().url(),
-     SARVAM_API_KEY: z.string().min(1),
-     SARVAM_WEBHOOK_SECRET: z.string().min(32),
-     JWT_SECRET: z.string().min(32),
-     REDIS_URL: z.string().url(),
-   });
-   
-   export const env = serverConfigSchema.parse(process.env);
-   ```
-2. **Production Secret Injection:** In production, secrets are injected via cloud provider secret managers (Google Cloud Secret Manager or AWS Secrets Manager) directly into container environment variables at runtime.
-3. **No Conversational Credentials:** During workspace setup or onboarding conversations, users are **never** prompted for ERP passwords or API secrets in chat. Integrations use dedicated server-authenticated OAuth or secured setting forms with encrypted at-rest storage (AES-256-GCM).
-
----
-
-## 4. Business Record Persistence & Data Architecture
-
-All business operations persist in PostgreSQL with strict relational constraints:
+### 3.2 Dynamic, Source-Backed Tax Configuration
+- **GST Rationalisation Reality:** On 22 September 2025, cement GST was reduced from 28% to 18% (PIB Backgrounder).
+- **Architecture Invariant:** Never hard-code global 18% or 28% tax rates. Tax rates are resolved through an **effective-dated tax configuration table**:
 
 ```sql
--- Core Procurement Request
-CREATE TABLE procurement_requests (
+CREATE TABLE tax_rate_rules (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID NOT NULL REFERENCES workspaces(id),
-    request_code VARCHAR(32) NOT NULL, -- e.g. KOV-1028
-    category VARCHAR(32) NOT NULL,     -- 'tmt', 'cement', etc.
-    status VARCHAR(32) NOT NULL,       -- 'DRAFT', 'SOURCING', 'QUOTES_READY', 'ORDERED', 'CLOSED'
-    specifications JSONB NOT NULL,     -- Grade, diameter, standard, pack size
-    quantity NUMERIC(12, 3) NOT NULL,
-    unit VARCHAR(16) NOT NULL,         -- 'tonnes', 'bags'
-    delivery_site VARCHAR(255) NOT NULL,
-    delivery_pin_code VARCHAR(6) NOT NULL,
-    required_by_date DATE NOT NULL,
-    delivery_basis VARCHAR(64) NOT NULL,
-    budget_limit NUMERIC(14, 2),
-    created_by UUID NOT NULL REFERENCES users(id),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT uk_workspace_request_code UNIQUE (workspace_id, request_code)
+    hsn_sac_code VARCHAR(16) NOT NULL, -- e.g. '7214' (TMT), '2523' (Cement)
+    description VARCHAR(255) NOT NULL,
+    cgst_rate NUMERIC(5, 2) NOT NULL,
+    sgst_rate NUMERIC(5, 2) NOT NULL,
+    igst_rate NUMERIC(5, 2) NOT NULL,
+    effective_from DATE NOT NULL,
+    effective_to DATE, -- NULL indicates current active rate
+    source_citation TEXT NOT NULL, -- e.g. 'Notification No. XX/2025-Central Tax (Rate)'
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+```
 
--- Quotations Received & Normalized
+---
+
+## 4. Deterministic Line-Item Quote Model & Comparability
+
+Rather than a simplistic aggregate equation, Kovok implements a **deterministic line-item commercial model**:
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                        QUOTATION LINE ITEMS                            │
+├───────────────┬──────────────┬───────────────┬─────────────────────────┤
+│ Line Type     │ Base Price   │ Tax Status    │ Logistics Inclusivity   │
+├───────────────┼──────────────┼───────────────┼─────────────────────────┤
+│ MATERIAL      │ ₹9,50,000    │ EXCLUSIVE     │ NOT_APPLICABLE          │
+│ FREIGHT       │ ₹30,000      │ EXCLUSIVE     │ SEPARATELY_BILLED       │
+│ UNLOADING     │ ₹0           │ N/A           │ INCLUDED_IN_MATERIAL    │
+└───────────────┴──────────────┴───────────────┴─────────────────────────┘
+                                   │
+                                   ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ 1. Compute Line Taxes: Base * Tax Rate (from effective tax rule)       │
+│ 2. Sum Lines: Material + Freight + Unloading (if separately billed)    │
+│ 3. Validate vs Supplier Quoted Total: Flag variance if mismatch        │
+│ 4. Evaluate Comparability: Incomplete ONLY if a relevant term = UNKNOWN│
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### Relational Quote Schema
+```sql
 CREATE TABLE quotations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id UUID NOT NULL REFERENCES workspaces(id),
     request_id UUID NOT NULL REFERENCES procurement_requests(id),
     supplier_id UUID NOT NULL REFERENCES suppliers(id),
     status VARCHAR(32) NOT NULL, -- 'CONFIRMED', 'PARTIAL', 'INCOMPLETE', 'EXPIRED', 'REJECTED'
-    base_subtotal NUMERIC(14, 2) NOT NULL,
-    discount_amount NUMERIC(14, 2) DEFAULT 0,
-    gst_rate_percent NUMERIC(4, 2) NOT NULL, -- 18.00 or 28.00
-    gst_amount NUMERIC(14, 2) NOT NULL,
-    freight_charges NUMERIC(14, 2),
-    unloading_charges NUMERIC(14, 2),
-    other_charges NUMERIC(14, 2) DEFAULT 0,
-    delivered_total NUMERIC(14, 2), -- Calculated deterministically; NULL if non-comparable
-    unit_cost_normalized NUMERIC(14, 2),
+    quoted_payable_total NUMERIC(14, 2) NOT NULL, -- Evidence as quoted by supplier
+    computed_payable_total NUMERIC(14, 2) NOT NULL, -- Deterministic validation calculation
+    commercial_variance NUMERIC(14, 2) GENERATED ALWAYS AS (quoted_payable_total - computed_payable_total) STORED,
     is_comparable BOOLEAN NOT NULL DEFAULT FALSE,
-    available_quantity NUMERIC(12, 3) NOT NULL,
-    promised_eta TIMESTAMPTZ,
+    comparability_notes TEXT,
     valid_until TIMESTAMPTZ NOT NULL,
-    supplier_terms TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-```
 
-### ACID Transactions
-Multi-entity state transitions are wrapped in atomic database transactions:
-- When a quote is approved, a database transaction validates quote validity, locks the quotation record (`FOR UPDATE`), creates the Purchase Order, creates an Approval Record, transitions the Request state to `ORDER_CONFIRMED`, and appends an entry to `audit_logs`.
-
----
-
-## 5. Idempotent Sarvam Webhook Processing
-
-Sarvam voice agents transmit call updates, transcripts, and structured quote extractions asynchronously via webhooks. Networks may produce duplicate deliveries, out-of-order deliveries, or retries.
-
-```
-Incoming Webhook
-      │
-      ▼
-┌──────────────────────────────────────────────┐
-│  1. Verify HMAC-SHA256 Signature Header      │
-│     (Reject with 401 if invalid)             │
-└──────────────────────┬───────────────────────┘
-                       │
-                       ▼
-┌──────────────────────────────────────────────┐
-│  2. Extract Event ID & Timestamp             │
-│     (Reject if timestamp > 5 min old)        │
-└──────────────────────┬───────────────────────┘
-                       │
-                       ▼
-┌──────────────────────────────────────────────┐
-│  3. Database Check: webhook_events Table     │
-│     INSERT INTO webhook_events (provider,    │
-│       event_id, payload_hash)                │
-│     ON CONFLICT DO NOTHING                   │
-└──────────────────────┬───────────────────────┘
-                       │
-         ┌─────────────┴─────────────┐
-         │ Record Already Exists?    │
-         ├─── YES ────────────── NO ─┤
-         ▼                           ▼
-┌──────────────────┐       ┌────────────────────────────────┐
-│ Return HTTP 200  │       │ 4. Execute Business Logic:     │
-│ (Acknowledge     │       │    - Parse quote extraction    │
-│  duplicate)      │       │    - Update call session       │
-└──────────────────┘       │    - Recalculate quote matrix  │
-                           │ 5. Mark Event PROCESSED        │
-                           │ 6. Return HTTP 200             │
-                           └────────────────────────────────┘
-```
-
-### Database Deduplication Schema
-```sql
-CREATE TABLE webhook_events (
+CREATE TABLE quotation_lines (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    provider VARCHAR(32) NOT NULL DEFAULT 'sarvam',
-    event_id VARCHAR(128) NOT NULL,
-    event_type VARCHAR(64) NOT NULL,
-    payload_hash VARCHAR(64) NOT NULL,
-    payload JSONB NOT NULL,
-    status VARCHAR(32) NOT NULL DEFAULT 'RECEIVED', -- 'RECEIVED', 'PROCESSED', 'FAILED'
-    received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    processed_at TIMESTAMPTZ,
-    CONSTRAINT uk_provider_event UNIQUE (provider, event_id)
+    quotation_id UUID NOT NULL REFERENCES quotations(id) ON DELETE CASCADE,
+    line_type VARCHAR(32) NOT NULL, -- 'MATERIAL', 'FREIGHT', 'LOADING', 'UNLOADING', 'INSURANCE', 'OTHER'
+    taxable_base NUMERIC(14, 2) NOT NULL,
+    discount_amount NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    hsn_sac_code VARCHAR(16),
+    tax_category VARCHAR(32) NOT NULL, -- 'STANDARD_GST', 'EXEMPT', 'REVERSE_CHARGE'
+    tax_rate_percent NUMERIC(5, 2) NOT NULL,
+    tax_treatment VARCHAR(16) NOT NULL, -- 'EXCLUSIVE', 'INCLUSIVE'
+    logistics_inclusivity VARCHAR(32) NOT NULL, -- 'INCLUDED_IN_MATERIAL', 'SEPARATELY_BILLED', 'NOT_APPLICABLE', 'UNKNOWN'
+    computed_tax_amount NUMERIC(14, 2) NOT NULL,
+    computed_line_total NUMERIC(14, 2) NOT NULL
 );
 ```
 
+### Comparability Rules
+- A quote is flagged as `Non-comparable (Incomplete)` **only** when a material cost or required term is `UNKNOWN` and relevant to the delivery basis.
+- If freight or unloading is explicitly marked `INCLUDED_IN_MATERIAL` or `NOT_APPLICABLE` (e.g., ex-yard basis), the quote is fully comparable.
+
 ---
 
-## 6. Duplicate Order Prevention & Strict Order Authorization
+## 5. Verified Sarvam Webhook Security & Event Correlation
 
-Kovok enforces a strict authorization boundary: **The buyer pays the supplier directly; Kovok must never generate a purchase order without explicit, verified buyer authorization**.
+Sarvam AI's public Instant Outbound Webhook contract transmits `attempt_id`, `status`, `interaction_id`, `final_agent_variables`, and `transcript`. It does **not** document an HMAC signature header or general event timestamp.
 
 ```
-Buyer Clicks "Select for Approval"
-                │
-                ▼
-┌──────────────────────────────────────────────┐
-│  1. Check User Permissions (RBAC)            │
-│     Is user authorized for amount ₹X?        │
-└──────────────────────┬───────────────────────┘
-                │
-                ▼
-┌──────────────────────────────────────────────┐
-│  2. Validate Quotation Freshness             │
-│     Is quote expired? Is delivered cost valid│
-└──────────────────────┬───────────────────────┘
-                │
-                ▼
-┌──────────────────────────────────────────────┐
-│  3. Generate Cryptographic Snapshot Hash     │
-│     SHA-256(supplier_id + items + total + ETA│
-└──────────────────────┬───────────────────────┘
-                │
-                ▼
-┌──────────────────────────────────────────────┐
-│  4. Acquire Distributed Lock (Redis)         │
-│     Key: lock:approval:request:<request_id>  │
-└──────────────────────┬───────────────────────┘
-                │
-                ▼
-┌──────────────────────────────────────────────┐
-│  5. Atomic DB Transaction:                   │
-│     - Verify no existing PO for this quote   │
-│     - Insert into approvals table            │
-│     - Insert into purchase_orders            │
-│     - Set request.status = 'ORDERED'         │
-└──────────────────────┬───────────────────────┘
-                │
-                ▼
-┌──────────────────────────────────────────────┐
-│  6. Release Lock & Return PO Confirmation    │
-└──────────────────────────────────────────────┘
+Incoming Webhook (POST /api/v1/webhooks/sarvam/events?token=SECRET_TOKEN)
+                               │
+                               ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ 1. Validate Secret Endpoint Ingestion Token                            │
+│    (Return HTTP 401 if invalid or absent)                              │
+└──────────────────────────────┬─────────────────────────────────────────┘
+                               │
+                               ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ 2. Schema Validation (Zod against Sarvam Documented Webhook Payload)   │
+│    (Return HTTP 400 if malformed)                                      │
+└──────────────────────────────┬─────────────────────────────────────────┘
+                               │
+                               ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ 3. Internal Call Correlation:                                          │
+│    Does incoming attempt_id match an active Kovok call attempt?        │
+│    ├── NO  ──► Log as suspicious, return HTTP 404/200 (Drop event)     │
+│    └── YES ──► Proceed                                                 │
+└──────────────────────────────┬─────────────────────────────────────────┘
+                               │
+                               ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ 4. Transactional Deduplication & State Machine Guard:                  │
+│    INSERT INTO webhook_events (attempt_id, status) ON CONFLICT DO ...  │
+│    Is event duplicate or out-of-order?                                 │
+│    ├── DUPLICATE/STALE ──► Return HTTP 200 (No re-execution)           │
+│    └── NEW TRANSITION  ──► Update call log & quote candidate evidence  │
+└──────────────────────────────┬─────────────────────────────────────────┘
+                               │
+                               ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ 5. Optional Server Verification: Query Sarvam API GET /outbound/:id   │
+│ 6. Note: Webhook NEVER places orders or creates POs independently.     │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Database Anti-Duplicate Constraints
+### Non-Authority Rule
+A webhook payload is untrusted external evidence. It updates call transcripts and candidate quote details, but **never independently authorizes a purchase or creates a Purchase Order**.
+
+---
+
+## 6. Authentication, Multi-Tenancy & Transaction-Local RLS
+
+### Single Primary Authentication Strategy
+- Web application uses **secure server-side sessions** with `HttpOnly`, `Secure`, and `SameSite=Lax` cookies.
+- Avoids custom JWT and session duplication. JWTs are reserved exclusively for machine-to-machine API integrations.
+
+### Transaction-Local Row-Level Security (RLS)
+To prevent connection-pool bleed in connection poolers (PgBouncer):
+```sql
+ALTER TABLE procurement_requests ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY workspace_isolation_policy ON procurement_requests
+    FOR ALL
+    USING (workspace_id = NULLIF(current_setting('app.current_workspace_id', TRUE), '')::uuid);
+```
+
+In application transaction middleware, tenant context is set **transaction-locally**:
+```typescript
+await prisma.$transaction(async (tx) => {
+  // SET LOCAL scopes the variable strictly to this transaction boundary
+  await tx.$executeRawUnsafe(
+    `SET LOCAL app.current_workspace_id = '${currentWorkspaceId}';`
+  );
+  
+  // Queries execute within verified workspace scope
+  return tx.procurementRequest.findMany({ ... });
+});
+```
+
+---
+
+## 7. Duplicate Order Prevention & Split Fulfillment
+
+### Business Invariants
+1. **Direct Payment Invariant:** The buyer pays the supplier directly. Kovok does not hold money and never places an order without verified buyer signoff.
+2. **One Order Per Approved Approval Version:** A quotation may undergo split fulfillment (e.g. 20 tonnes needed, Supplier A provides 12 tonnes on PO-1; Supplier B provides 8 tonnes on PO-2). Therefore, `UNIQUE (quotation_id)` is rejected as overly restrictive.
+3. **Idempotency Invariant:** Every order creation requires a client-provided `idempotency_key` and unique `approval_id`:
+
 ```sql
 CREATE TABLE purchase_orders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id UUID NOT NULL REFERENCES workspaces(id),
-    po_number VARCHAR(32) NOT NULL, -- e.g. PO-0261
+    po_number VARCHAR(32) NOT NULL,
     request_id UUID NOT NULL REFERENCES procurement_requests(id),
     quotation_id UUID NOT NULL REFERENCES quotations(id),
-    supplier_id UUID NOT NULL REFERENCES suppliers(id),
     approval_id UUID NOT NULL REFERENCES approvals(id),
-    commercial_terms_hash VARCHAR(64) NOT NULL, -- Tamper proof snapshot
+    idempotency_key VARCHAR(128) NOT NULL,
+    split_index INT NOT NULL DEFAULT 0,
     total_approved_amount NUMERIC(14, 2) NOT NULL,
-    po_status VARCHAR(32) NOT NULL DEFAULT 'CONFIRMED', -- 'CONFIRMED', 'DISPATCHED', 'ARRIVED', 'INSPECTED', 'RECONCILED'
+    approved_terms_snapshot JSONB NOT NULL, -- Full immutable snapshot of approved commercial terms
+    snapshot_checksum VARCHAR(64) NOT NULL, -- SHA-256 hash of approved_terms_snapshot
+    po_status VARCHAR(32) NOT NULL DEFAULT 'CONFIRMED',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    -- Enforce single PO per approved quotation
-    CONSTRAINT uk_po_quotation UNIQUE (quotation_id),
+    CONSTRAINT uk_po_approval UNIQUE (approval_id),
+    CONSTRAINT uk_po_idempotency UNIQUE (workspace_id, idempotency_key),
     CONSTRAINT uk_workspace_po_number UNIQUE (workspace_id, po_number)
 );
 ```
 
----
-
-## 7. Multi-Tenant Isolation & Immutable Audit History
-
-### Multi-Tenancy Architecture
-1. **Workspace Boundary:** Every enterprise organization operates within an isolated `workspace_id`.
-2. **Row-Level Security (RLS):**
-   ```sql
-   ALTER TABLE procurement_requests ENABLE ROW LEVEL SECURITY;
-   
-   CREATE POLICY workspace_isolation_policy ON procurement_requests
-       FOR ALL
-       USING (workspace_id = current_setting('app.current_workspace_id')::uuid);
-   ```
-3. **Session Context Middleware:** Database connections set the session variable before executing queries:
-   ```typescript
-   await prisma.$executeRawUnsafe(
-     `SET LOCAL app.current_workspace_id = '${currentWorkspaceId}';`
-   );
-   ```
-
-### Immutable Audit Trail
-Any commercial decision, call trigger, approval, or exception modification generates an immutable audit record:
-```sql
-CREATE TABLE audit_logs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID NOT NULL REFERENCES workspaces(id),
-    actor_id UUID NOT NULL REFERENCES users(id),
-    action VARCHAR(64) NOT NULL, -- 'REQUEST_CREATED', 'CALL_DISPATCHED', 'QUOTE_APPROVED', 'EXCEPTION_RAISED'
-    entity_type VARCHAR(64) NOT NULL,
-    entity_id UUID NOT NULL,
-    payload_before JSONB,
-    payload_after JSONB,
-    client_ip VARCHAR(45),
-    user_agent TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-```
+### Approved Terms Snapshot Verification
+Before persisting the PO, the system normalizes the approved commercial terms (supplier, items, quantities, basic rates, GST breakdown, freight/unloading terms, ETA, payment terms) into a canonical JSON snapshot, computes its SHA-256 checksum, and stores both on the PO. Any discrepancy during delivery reconciliation triggers an audit alert.
 
 ---
 
-## 8. Separation of Development Fixtures from Production Data
+## 8. Lean Modular Monolith & Provider-Agnostic Infrastructure
 
-1. **Strict Environment Segregation:**
-   - Development/Test fixtures reside in `prisma/fixtures/` and are only loaded via `npm run db:seed`.
-   - Seed scripts strictly check `process.env.NODE_ENV !== 'production'`. Attempting to run seeds in production halts with an error.
-2. **Visual Prototype Mode Flag:**
-   - In production, real database data is rendered.
-   - If a tenant runs in demo/sandbox mode, the UI explicitly displays the topbar banner: `<span class="sample">SANDBOX / SAMPLE DATA</span>`.
-3. **Mock Voice Provider:**
-   - During local development and automated testing, a `MockSarvamVoiceProvider` simulates voice call progression (queued $\rightarrow$ ringing $\rightarrow$ completed) and returns realistic test fixtures without consuming Sarvam telephony credits or dialling real supplier numbers.
+### Modular Monolith with Transactional Outbox
+Rather than requiring separate microservices or mandatory Redis clusters:
+- Core business logic and background jobs run within the single application process using **PostgreSQL-backed transactional jobs** (e.g., Graphile Worker / Pg-Boss).
+- When a quote is approved or a call is scheduled, the job is inserted into the database within the *same ACID transaction* as the domain state update.
+- Redis remains an optional, non-blocking enhancement for distributed rate-limiting.
 
----
-
-## 9. Deployment & Infrastructure Architecture
-
-```
-                                  Internet
-                                     │
-                                     ▼
-                    ┌─────────────────────────────────┐
-                    │  Cloudflare / Cloud Armor WAF   │
-                    │  - DDoS Protection & SSL Term   │
-                    │  - Rate Limiting on Webhooks    │
-                    └────────────────┬────────────────┘
-                                     │
-                                     ▼
-                    ┌─────────────────────────────────┐
-                    │     GCP Cloud Run / AWS ECS     │
-                    │     (Next.js App Containers)    │
-                    │     Located in Mumbai (India)   │
-                    └───────┬─────────────────┬───────┘
-                            │                 │
-              ┌─────────────▼────┐       ┌────▼─────────────┐
-              │  GCP Cloud SQL   │       │ GCP Memorystore  │
-              │  PostgreSQL 16   │       │ Redis (Queues)   │
-              │  (Multi-AZ HA)   │       │ (Mumbai Region)  │
-              └──────────────────┘       └──────────────────┘
-```
-
-- **Cloud Region:** Mumbai (`asia-south1`) or Delhi (`asia-south2`) to guarantee low latency for Indian users and enforce full compliance with Indian data protection legislation.
-- **Stateless Containers:** Scaled horizontally on Google Cloud Run or AWS ECS Fargate.
-- **Managed Database & Cache:** Cloud SQL PostgreSQL with automated daily backups and point-in-time recovery; Cloud Memorystore for Redis handling queue persistence.
+### Cloud Provider Selection
+Hosting and database regions will be finalized upon provider selection (comparing AWS `ap-south-1` Mumbai, GCP `asia-south1` Mumbai, and Azure `centralindia` Pune) based on latency benchmarks, database pricing, and Indian DPDP Act compliance.
