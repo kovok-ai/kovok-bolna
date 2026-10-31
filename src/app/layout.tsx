@@ -4,6 +4,10 @@ import '@/styles/globals.css';
 export const metadata: Metadata = {
   title: 'Kovok — Construction Procurement Operations',
   description: 'AI procurement operations platform for Indian construction materials (TMT Steel, Cement)',
+  icons: {
+    icon: '/images/kovok-logo.png',
+    apple: '/images/kovok-logo.png',
+  },
 };
 
 export default function RootLayout({

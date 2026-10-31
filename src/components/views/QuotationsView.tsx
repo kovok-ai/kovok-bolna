@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
 import {
   BadgeDollarSign,
   CheckCircle2,
@@ -195,8 +196,33 @@ export function QuotationsView({ onApproveQuote, onClarifyQuote }: QuotationsVie
               Loading commercial quotations...
             </div>
           ) : quotations.length === 0 ? (
-            <div style={{ padding: '36px', textAlign: 'center', color: '#64748b' }}>
-              No commercial quotations collected yet. Initiate a supplier call from the Requests tab to populate quotations.
+            <div style={{ padding: '48px 24px', textAlign: 'center', color: '#64748b' }}>
+              <div
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '50%',
+                  background: '#f1f5f9',
+                  display: 'grid',
+                  placeItems: 'center',
+                  margin: '0 auto 12px',
+                  padding: '9px',
+                }}
+              >
+                <Image
+                  src="/images/kovok-logo.png"
+                  alt="Kovok"
+                  width={26}
+                  height={26}
+                  style={{ width: '26px', height: '26px', objectFit: 'contain' }}
+                />
+              </div>
+              <strong style={{ display: 'block', fontSize: '14px', color: '#1e293b', marginBottom: '6px' }}>
+                No commercial quotations collected yet
+              </strong>
+              <p style={{ maxWidth: '420px', margin: '0 auto', fontSize: '12px' }}>
+                Initiate a supplier call from the Requests tab to populate and compare supplier quotations.
+              </p>
             </div>
           ) : (
             <table className="quote-table">

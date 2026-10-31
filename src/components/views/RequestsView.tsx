@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import Image from 'next/image';
 import {
   FileText,
   PhoneCall,
@@ -261,10 +262,16 @@ export function RequestsView({
                 display: 'grid',
                 placeItems: 'center',
                 margin: '0 auto 12px',
-                color: '#1e40af',
+                padding: '10px',
               }}
             >
-              <FileText size={24} />
+              <Image
+                src="/images/kovok-logo.png"
+                alt="Kovok"
+                width={28}
+                height={28}
+                style={{ width: '28px', height: '28px', objectFit: 'contain' }}
+              />
             </div>
             <strong style={{ display: 'block', fontSize: '14px', color: '#1e293b', marginBottom: '6px' }}>
               No procurement requests yet

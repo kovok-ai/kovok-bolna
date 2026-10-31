@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Image from 'next/image';
 import { Menu, Search, HelpCircle, Plus } from 'lucide-react';
 
 interface TopbarProps {
@@ -24,13 +25,26 @@ export function Topbar({
 }: TopbarProps) {
   return (
     <header className="topbar">
-      <button
-        className="icon-btn mobile-only"
-        onClick={onToggleMenu}
-        aria-label="Open navigation"
-      >
-        <Menu size={18} />
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <button
+          className="icon-btn mobile-only"
+          onClick={onToggleMenu}
+          aria-label="Open navigation"
+        >
+          <Menu size={18} />
+        </button>
+
+        <div className="mobile-only" style={{ display: 'flex', alignItems: 'center' }}>
+          <Image
+            src="/images/kovok-logo.png"
+            alt="Kovok"
+            width={24}
+            height={24}
+            style={{ width: '24px', height: '24px', objectFit: 'contain' }}
+            priority
+          />
+        </div>
+      </div>
 
       <div className="crumb">
         <span className="crumb-full">{workspaceName} /</span>

@@ -1,197 +1,157 @@
-# Kovok — Construction Procurement Operations Platform
+<div align="center">
+  <img src="public/images/kovok-logo.png" alt="Kovok Logo" width="72" height="72" />
+  <h1>Kovok</h1>
+  <p><strong>AI-powered construction procurement, from material request to supplier quotation.</strong></p>
+</div>
 
-AI procurement operations platform for Indian construction materials, initially focused on **TMT steel** and **cement**.
-
-Supports two operational modes:
-1. **Connected Procurement**: Buyers connect existing ERP, accounting, or inventory software.
-2. **Quick Source**: Buyers without software describe requirements; Kovok coordinates quotes, approvals, and order tracking.
-
-> **Core Invariant**: The buyer pays the supplier directly. Kovok is an operations and intelligence layer; it must **never** place an order or commit commercial terms without verified, explicit buyer authorization.
+Kovok helps construction teams manage material procurement by organizing requests, identifying suppliers, collecting quotations through AI-assisted voice calls, and supporting buyer review and order tracking.
 
 ---
 
-## 1. System Requirements & Approved Technology Stack
+## Product Overview
 
-| Component | Approved Specification |
-| :--- | :--- |
-| **Runtime** | **Node.js 24 LTS** (`>=24.0.0`) |
-| **Application Framework** | **Next.js 16.2.x** (App Router, Turbopack, TypeScript 5.7+) |
-| **UI Library** | **React 19** |
-| **Database** | **PostgreSQL 16+** with Prisma ORM (`@prisma/client@6.19.3`) |
-| **Zero-Daemon Engine** | **@electric-sql/pglite** (Embedded PostgreSQL 16 WASM for portable tests) |
-| **Validation** | **Zod 3.24+** (Server-side input and environment validation) |
-| **Authentication** | **Server-side sessions** using secure, `HttpOnly`, `SameSite=Lax` cookies; Scrypt password hashing with cryptographically random salts |
-| **Multi-Tenancy** | **PostgreSQL Row-Level Security (RLS)** with `FORCE ROW LEVEL SECURITY` and transaction-local scoping (`SET LOCAL app.current_workspace_id`) |
-| **Worker Design** | **PostgreSQL-backed transactional queue** (No Redis in Phase 1) |
+![Kovok Construction Procurement Operations Dashboard](docs/images/kovok-product-demo.png)
+*Live multi-tenant procurement operations dashboard showing active material requests, quotations pending authorization, and purchase order tracking.*
 
 ---
 
-## 2. Directory Structure
+## The Problem
+
+Construction-material procurement in India is highly fragmented, manual, and prone to costly errors:
+
+- **Unstructured Material Requests**: Site engineers often send vague requirements over chat or phone (e.g., "send 10 MT of 12mm rebar") without standard grade specifications, delivery windows, or test certificate requirements.
+- **Manual Price Discovery**: Procurement managers must call multiple local distributors, verify stock availability, and collect verbal quotes that change daily based on steel mill and cement plant dispatches.
+- **Disparate Commercial Terms**: Quotes arrive with differing commercial baselines—some include 18% or 28% GST, others quote ex-mill prices with freight, unloading, and crane charges added separately.
+- **Missing Audit Trails**: Purchase orders are frequently issued over chat or phone without auditable records of quotation comparisons, leading to disputes over delivery weights, rolling tolerances, and off-spec substitutions.
+
+---
+
+## How Kovok Works
 
 ```text
-├── .env.example              # Sanitized canonical environment template
-├── .gitignore                # Production ignore rules (secrets, node_modules, build artifacts)
-├── package.json              # Pinned dependencies & scripts
-├── tsconfig.json             # TypeScript configuration (App Router paths, tests excluded from build)
-├── next.config.js            # Next.js configuration
-├── README.md                 # Setup, migrations, test commands, and limitations
-│
-├── prisma/
-│   ├── schema.prisma         # Multi-tenant data model (Workspaces, Sites, Users, Roles, Approvals, POs, Tax Rules)
-│   ├── seed.ts               # Reference data (GST rules, default workspace/admin, production guard)
-│   └── migrations/
-│       └── 20261030000000_init/
-│           └── migration.sql # PostgreSQL 16 DDL with FORCE ROW LEVEL SECURITY and isolation policies
-│
-├── src/
-│   ├── app/                  # Next.js 16 App Router
-│   │   ├── api/auth/         # Route handlers: login, register, logout, session
-│   │   ├── api/workspaces/   # RLS-scoped workspace & reference data endpoints
-│   │   ├── login/page.tsx    # Styled authentication screen
-│   │   ├── register/page.tsx # Workspace onboarding & admin provisioning
-│   │   ├── layout.tsx        # Global HTML shell & CSS token imports
-│   │   └── page.tsx          # Protected Server Component entry point (session enforcement)
-│   ├── components/
-│   │   ├── KovokAppClient.tsx # Client application shell (tab navigation & state)
-│   │   ├── layout/           # Sidebar, Topbar
-│   │   ├── modals/           # NewRequestModal (4-step wizard), ApprovalModal
-│   │   └── views/            # 9 Modular views (Overview, Requests, Quotations, Orders, etc.)
-│   ├── lib/
-│   │   ├── auth.ts           # Scrypt hashing, constant-time verification, session token management
-│   │   ├── db.ts             # Prisma client singleton & withTenantContext RLS helper
-│   │   ├── env.ts            # Zod environment variable parsing & validation
-│   │   ├── session.ts        # Server-side session verification & requireRole helper
-│   │   └── validators/       # Zod schemas for auth and workspace provisioning
-│   └── styles/
-│       ├── tokens.css        # Exact CSS custom properties ported from prototype
-│       └── globals.css       # Layout, typography, tables, badges, modals
-│
-├── tests/
-│   ├── run-all.ts            # Portable 32-test runner (RLS, RBAC, crypto, DDL, split fulfillment)
-│   └── check_ui_portable.py  # Portable Playwright smoke test (cross-platform, replaces Linux check_ui.py)
-│
-├── docs/                     # Canonical documentation (Single Source of Truth)
-│   ├── ARCHITECTURE_DECISIONS.md
-│   ├── CURRENT_STATE_AUDIT.md
-│   └── IMPLEMENTATION_PLAN.md
-│
-└── Kovok_Construction_UI_Premium/ # Untouched original prototype baseline
+[1. Material Request] ──> [2. Catalogue Resolution] ──> [3. Supplier Discovery]
+                                                                  │
+[6. Orders & Milestones] <── [5. Quote Comparison] <── [4. AI Voice Call Sourcing]
 ```
+
+1. **Create a project or site and raise a material request**: Define project delivery locations, contacts, and material requirements.
+2. **Resolve the material and specification**: The intake engine normalizes buyer descriptions against canonical specifications (e.g., IS 1786 for TMT Steel, IS 269/1489 for Cement) and calculates theoretical quantities and weights. Ambiguous requests route to clarification rather than allowing unverified substitutions.
+3. **Identify potential suppliers**: Search and filter regional stockists, verified distributors, and authorized dealers based on material category and delivery capabilities.
+4. **Initiate quotation collection via Sarvam Voice**: Dispatch structured AI voice agent calls to candidate suppliers to collect price-per-tonne/bag, freight, unloading terms, and delivery lead times.
+5. **Review and compare collected quotations**: Compare normalized commercial offers side by side with full transparency into base rates, taxes, freight, and net landed cost.
+6. **Approve and track purchase orders**: Authorize a selected quotation with an explicit buyer approval action, generating a persistent purchase order, delivery milestone timeline, and exception audit log.
 
 ---
 
-## 3. Getting Started
+## What Is Implemented
 
-### 3.1 Prerequisites
-- **Node.js 24 LTS** installed. Verify with `node -v`.
-- **npm** (v10+ or v11+).
+The application is built as an end-to-end, multi-tenant enterprise procurement system. The table below details what is currently implemented across the stack:
 
-### 3.2 Installation
+| Module | Implemented UI | Persisted Backend (PostgreSQL 16) | Integration & External Dependencies |
+| :--- | :--- | :--- | :--- |
+| **Workspace & Authentication** | Login and multi-field workspace registration screens; session handling; role indicators; demo account filler. | Scrypt async hashing; session tokens in database; multi-tenant isolation enforced via PostgreSQL Row-Level Security (RLS). | None. Fully self-contained local authentication engine. |
+| **Operational Dashboard** | Live metric cards for open requests, pending quotes, active POs, and open exceptions; recent procurement tables. | Aggregated real-time SQL queries over tenant-scoped tables; dynamic metric refresh. | None. Live database queries. |
+| **Projects & Delivery Sites** | Project creation; site address, geo-pinning, primary contact, and default site assignment. | Relational `projects` and `project_sites` tables with workspace foreign keys and default flags. | None. Fully persisted in PostgreSQL. |
+| **Material Catalogue & Intake** | 4-step procurement intake wizard; category selection; theoretical steel mass calculations; clarification flagging. | 18 verified canonical products (TMT Steel & Cement); dynamic unit resolution; sequential `KOV-REQ` code generator. | Reference catalogue data seeded locally. |
+| **Supplier Directory** | Searchable supplier directory; material category filtering; contact numbers; verified brand distribution badges. | `supplier_organizations` and `catalogue_suppliers` tables linked to verified brand manufacturers. | Illustrative supplier registry for evaluation. |
+| **Sarvam Voice Integration** | Supplier call drawer; configuration status check; dial parameter review; explicit dial confirmation guard. | Outbound call payload builder (`/api/procurement/calls`); timing-safe cryptographic webhook handler (`/api/integrations/sarvam/webhook`). | **Requires external credentials**: Valid Sarvam AI Voice Agents API key, registered telephony number, and public HTTPS webhook URL. |
+| **Quotation Review & Approval** | Side-by-side quotation comparison table; landed cost breakdown (base rate, freight, unloading, GST); approval action. | Commercial quotes table with status transitions; explicit buyer approval mutation requiring confirmation. | Quotes collected via webhook or created via evaluation intake. |
+| **Purchase Orders & Deliveries** | Purchase order detail view; delivery milestone tracker; CSV PO export; checksum verification. | Persistent `purchase_orders` linked to approved quotes; sequential `PO-XXXX` codes; `order_milestones` tracking. | None. Fully persisted and exportable. |
+| **Exceptions & Settings** | Exception logging modal (variance, damage, shortfall); required resolution note dialog; workspace settings. | Persistent `procurement_exceptions` table; resolution notes and status transitions; workspace rule updates. | None. Fully persisted in PostgreSQL. |
+
+---
+
+## Demo Status & Boundaries
+
+> **Core Invariant**: The buyer pays the supplier directly. Kovok operates as an intelligence, quotation-collection, and operational layer. The system **never** places orders or commits commercial terms autonomously without explicit buyer authorization.
+
+Please review the following operational boundaries for this release candidate:
+
+1. **Product Demo / Release Candidate**: This codebase is a working release candidate configured for evaluation and demonstration.
+2. **Catalogue & Supplier Data**: Supplier contacts, pricing, and availability records in the baseline database are illustrative development fixtures based on canonical BIS/IS specifications.
+3. **Live Voice Dialing**: The voice workflow includes complete payload construction, configuration auditing, and callback webhook processing. Placing live telephony calls requires:
+   - `SARVAM_API_KEY`: An active Sarvam AI Voice Agents API key.
+   - `SARVAM_AGENT_ID`: A configured voice agent identifier.
+   - `SARVAM_PHONE_NUMBER_ID`: An approved outbound telephony gateway number.
+   - A publicly accessible HTTPS callback URL for incoming call completion webhooks.
+   *If these credentials are not set, the application safely prevents dialing, reports the exact missing configuration, and protects against runtime failures.*
+4. **Human-in-the-Loop Approval**: Quotation review, commercial trade-offs, and final purchase order issuance always require explicit human buyer confirmation.
+
+---
+
+## Technology Stack
+
+The platform is built using a modern, type-safe full-stack architecture:
+
+- **Next.js 16 (App Router)**: Fast Server Components and Turbopack bundler.
+- **React 19**: Responsive client views and interactive procurement modals.
+- **TypeScript 5.7+**: Strict type checking across API routes, database models, and UI components.
+- **PostgreSQL 16 & Prisma ORM 6**: Relational data model with transaction isolation, composite foreign keys, and PostgreSQL Row-Level Security (`FORCE ROW LEVEL SECURITY`).
+- **Sarvam AI Voice Platform**: Conversational voice agent integration for supplier quotation calls in regional Indian languages.
+- **Lucide Icons & Design System Tokens**: Enterprise design system without decorative emojis.
+- **Testing Infrastructure**: Built-in test suites using `@electric-sql/pglite` (embedded PostgreSQL WASM) and native PostgreSQL integration runners.
+
+---
+
+## Local Run & Verification
+
+### 1. Prerequisites
+- **Node.js 24 LTS** (`node -v` >= 24.0.0)
+- **npm** (v10+ or v11+)
+- **PostgreSQL 16+** (Local service or cloud instance)
+
+### 2. Setup
 ```bash
-# Clone the repository and switch to Phase 1 branch
-git checkout phase-1-foundation
-
-# Install dependencies
+# 1. Install dependencies
 npm install
-```
 
-### 3.3 Environment Setup
-Create a local `.env` file from `.env.example`:
-```bash
+# 2. Configure environment
 cp .env.example .env
-```
-Ensure `.env` contains:
-```env
-NODE_ENV=development
-PORT=3000
-APP_URL=http://localhost:3000
-DATABASE_URL="postgresql://kovok_app:your_app_password@localhost:5432/kovok_dev?schema=public"
-DIRECT_URL="postgresql://postgres:your_admin_password@localhost:5432/kovok_dev?schema=public"
-SESSION_SECRET="kovok_phase_1_foundation_super_secure_session_secret_2026_at_least_32_chars"
+# Edit .env with your local PostgreSQL DATABASE_URL and SESSION_SECRET
+
+# 3. Generate Prisma client & sync schema
+npx prisma db push
+
+# 4. Seed reference data (GST tax rules, canonical products, evaluation demo workspace)
+npx prisma db seed
 ```
 
-> **Mandatory Security Rule (NOBYPASSRLS)**: The application runtime MUST connect as a dedicated non-superuser role (e.g. `kovok_app`) configured with `NOBYPASSRLS`:
-> ```sql
-> CREATE ROLE kovok_app WITH LOGIN PASSWORD 'your_app_password' NOBYPASSRLS;
-> GRANT USAGE ON SCHEMA public TO kovok_app;
-> GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO kovok_app;
-> GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO kovok_app;
-> ```
-> PostgreSQL superusers bypass Row-Level Security unconditionally. Never connect `DATABASE_URL` as a superuser!
-
----
-
-## 4. Database Migrations & Seeding
-
-### 4.1 Generate Prisma Client
+### 3. Start the Application
 ```bash
-npm run db:generate
-```
-
-### 4.2 Run Database Migrations
-```bash
-npm run db:migrate
-```
-*Applies two sequential canonical migrations:*
-1. `20261030000000_init/migration.sql`: Establishes 12 core tables, unique constraints, foreign keys, and initial RLS policies.
-2. `20261030000001_security_and_invariants/migration.sql`: Completes `FORCE ROW LEVEL SECURITY` on `workspace_roles`, `workspace_memberships`, and `sessions`, and establishes PostgreSQL triggers (`trg_check_approval_allocation_limit` with `FOR UPDATE` lock and `trg_check_approval_quantity_reduction`) enforcing the split-allocation quantity invariant ($\sum \text{allocated} \le \text{approved}$).
-
-### 4.3 Seed Development Fixtures
-```bash
-npm run db:seed
-```
-*Seeds dynamic GST tax rate rules (flagged as Draft pending gazette sign-off) and default development workspace "Concrete & Co." with admin user `shiwang@concreteandco.in` / `KovokSecure2026!`.*
-
-> **Production Safety Guard**: The seed script checks `process.env.NODE_ENV === 'production'` and immediately aborts with a fatal error if executed in production.
-
-
----
-
-## 5. Running the Test Suite
-
-Phase 1 provides a fully automated, portable test suite executed using `@electric-sql/pglite` (Node.js WASM PostgreSQL 16 engine). It requires **no external PostgreSQL daemon or Docker setup** to run locally.
-
-### 5.1 Run Comprehensive Foundation Tests
-```bash
-npm test
-```
-Executes all **32 acceptance tests** across 8 test suites:
-1. **Environment Validation**: Rejection of missing/invalid `DATABASE_URL` and `SESSION_SECRET`.
-2. **Cryptographic Primitives**: Scrypt unique salting, constant-time verification, malformed hash rejection.
-3. **Database DDL Migration & Rollback**: Clean schema creation and transaction rollback/recovery.
-4. **Workspace & Auth Workflows**: Provisioning Tenant A & B, login, active session issuance, logout revocation.
-5. **Role-Based Access Control**: Permissions enforcement for Admin vs Site Engineer roles.
-6. **PostgreSQL Row-Level Security (RLS)**: Transaction-local isolation between workspaces, preventing cross-tenant visibility or record forgery.
-7. **Split Fulfillment Data Model**: Multiple `approval_allocations` under one approval; `purchase_orders` uniqueness on `approval_allocation_id`; quantity constraint validation ($\sum \text{Allocated} \le \text{Approved}$).
-8. **Dynamic Tax Rate Rules**: Effective-dated GST resolution for Cement (28% before 22 Sept 2025; 18% thereafter) and Steel (18%).
-
-### 5.2 Run Portable UI Smoke Test
-```bash
-python tests/check_ui_portable.py
-```
-*Replaces the previous Linux-only prototype smoke test (`/usr/bin/chromium` and `/mnt/data/` hardcodes) with a cross-platform test verifying all 9 navigation tabs, modals, and responsive mobile behavior with 0 page errors.*
-
----
-
-## 6. Running the Application
-
-### 6.1 Development Mode
-```bash
+# Development mode
 npm run dev
-```
-Open [http://localhost:3000](http://localhost:3000).
 
-### 6.2 Production Build & Execution
-```bash
+# Or production build & start
 npm run build
 npm run start
 ```
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+### 4. Evaluation Credentials
+A pre-seeded demonstration account is available for local review:
+- **Email**: `demo@kovok.test`
+- **Password**: `DemoEvaluation2026!`
+- *Alternatively, use the registration form to provision an independent, isolated workspace.*
+
+### 5. Automated Verification Suites
+```bash
+# Unit & architecture tests (64 tests across 14 test suites)
+npm test
+
+# Real PostgreSQL 16 connection & RLS verification (17 tests)
+npm run test:real-postgres
+
+# End-to-end authentication flow verification (5 tests)
+npx tsx tests/auth-flows.ts
+
+# Complete release candidate acceptance verification (15 tests)
+npx tsx tests/final-acceptance.ts
+```
 
 ---
 
-## 7. Known Limitations & Phase Boundaries
+## Repository & Development
 
-1. **Sarvam AI Voice Integration**: Voice call dispatching and telephony webhooks are strictly scoped for Phase 4. Webhook endpoints are designed but inactive in Phase 1.
-2. **Live Supplier Quotation Processing**: Live quote ingestion and automated parsing are out of scope for Phase 1. Development fixtures and mock data are isolated from production.
-3. **External ERP Integrations**: Connected procurement webhooks (e.g., Tally, SAP, Zoho) are UI placeholders in Phase 1 and will be connected in Phase 5.
-4. **Prototype Baseline Integrity**: The original HTML prototype files in `Kovok_Construction_UI_Premium/` are preserved untouched as reference artifacts on `master`.
+- **Repository**: [https://github.com/kovok-ai/kovok-bolna](https://github.com/kovok-ai/kovok-bolna)
+- **Active Branch**: `phase-2-catalogue-intake`
+- **License**: Private / Proprietary — Kovok AI. All rights reserved.

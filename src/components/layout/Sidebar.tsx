@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Image from 'next/image';
 import {
   LayoutDashboard,
   FileText,
@@ -68,7 +69,16 @@ export function Sidebar({
     <aside className={`sidebar ${isOpen ? 'open' : ''}`} id="sidebar">
       {/* Brand */}
       <div className="brand">
-        <div className="mark">k.</div>
+        <div className="brand-mark-logo">
+          <Image
+            src="/images/kovok-logo.png"
+            alt="Kovok"
+            width={28}
+            height={28}
+            className="brand-logo-img"
+            priority
+          />
+        </div>
         <div>
           <div className="brand-name">
             kovok<span>.</span>

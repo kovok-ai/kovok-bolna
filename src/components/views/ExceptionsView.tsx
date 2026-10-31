@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -243,8 +244,33 @@ export function ExceptionsView({ onReviewRecovery }: ExceptionsViewProps) {
           {loading ? (
             <div style={{ padding: '36px', textAlign: 'center', color: '#64748b' }}>Loading exceptions...</div>
           ) : exceptions.length === 0 ? (
-            <div style={{ padding: '36px', textAlign: 'center', color: '#64748b' }}>
-              No exceptions currently open. When delivery variances, rolling shortfalls, or damaged materials are logged, they will appear here.
+            <div style={{ padding: '48px 24px', textAlign: 'center', color: '#64748b' }}>
+              <div
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '50%',
+                  background: '#f1f5f9',
+                  display: 'grid',
+                  placeItems: 'center',
+                  margin: '0 auto 12px',
+                  padding: '9px',
+                }}
+              >
+                <Image
+                  src="/images/kovok-logo.png"
+                  alt="Kovok"
+                  width={26}
+                  height={26}
+                  style={{ width: '26px', height: '26px', objectFit: 'contain' }}
+                />
+              </div>
+              <strong style={{ display: 'block', fontSize: '14px', color: '#1e293b', marginBottom: '6px' }}>
+                No active procurement exceptions
+              </strong>
+              <p style={{ maxWidth: '440px', margin: '0 auto', fontSize: '12px' }}>
+                When delivery variances, rolling weight shortfalls, or damaged materials are logged, they will appear here with an auditable resolution trail.
+              </p>
             </div>
           ) : (
             <table>

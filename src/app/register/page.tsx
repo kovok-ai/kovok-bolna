@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { ArrowRight } from 'lucide-react';
 
 export default function RegisterPage() {
@@ -69,8 +70,18 @@ export default function RegisterPage() {
           boxShadow: '0 8px 30px rgba(23, 32, 45, 0.08)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '9px', marginBottom: '20px' }}>
-          <div className="mark">k.</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '11px', marginBottom: '20px' }}>
+          <div className="brand-mark-logo" style={{ width: '34px', height: '34px' }}>
+            <Image
+              src="/images/kovok-logo.png"
+              alt="Kovok"
+              width={34}
+              height={34}
+              priority
+              className="brand-logo-img"
+              style={{ width: '34px', height: '34px', objectFit: 'contain' }}
+            />
+          </div>
           <div>
             <div className="brand-name">
               kovok<span>.</span>
