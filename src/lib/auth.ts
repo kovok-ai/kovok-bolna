@@ -146,8 +146,10 @@ export async function revokeSession(sessionToken: string): Promise<void> {
 export function isSecureCookie(): boolean {
   if (process.env.COOKIE_SECURE === 'true') return true;
   if (process.env.COOKIE_SECURE === 'false') return false;
-  // When running with explicit HTTPS APP_BASE_URL in production deployments
-  if (process.env.APP_BASE_URL?.startsWith('https://')) return true;
+  // Automatically secure cookies on Vercel deployments
+  if (process.env.VERCEL === '1') return true;
+  // When running with explicit HTTPS APP_BASE_URL or APP_URL in production deployments
+  if (process.env.APP_BASE_URL?.startsWith('https://') || process.env.APP_URL?.startsWith('https://')) return true;
   // Allow HTTP during local development and testing on localhost / private IPs
   return false;
 }

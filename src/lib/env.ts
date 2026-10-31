@@ -3,7 +3,14 @@ import { z } from 'zod';
 export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.string().default('3000'),
-  APP_URL: z.string().url().default('http://localhost:3000'),
+  APP_URL: z.string().optional().transform((val) => {
+    if (val && !val.startsWith('http://') && !val.startsWith('https://')) {
+      return `https://${val}`;
+    }
+    if (val) return val;
+    if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+    return 'http://localhost:3000';
+  }),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   DIRECT_URL: z.string().optional(),
   SESSION_SECRET: z.string().min(32, 'SESSION_SECRET must be at least 32 characters long'),

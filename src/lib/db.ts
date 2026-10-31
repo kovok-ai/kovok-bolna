@@ -11,9 +11,9 @@ export const prisma =
     log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
   });
 
-if (process.env.NODE_ENV !== 'production') {
-  globalThis.__globalPrismaClient = prisma;
-}
+// In development or on Vercel/serverless environments, preserve client on globalThis
+// to prevent connection exhaustion across hot-reloads and warm serverless invocations.
+globalThis.__globalPrismaClient = prisma;
 
 /**
  * Executes a callback within a transaction where the tenant context
