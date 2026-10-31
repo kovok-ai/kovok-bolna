@@ -1,0 +1,10 @@
+.env
+.env.*
+.env.local
+.env.production.local
+.env.development.local
+.env.test.local
+*.env
+tests/
+pglite-test-data/
+*.log
