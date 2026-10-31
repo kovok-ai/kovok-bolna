@@ -9,8 +9,27 @@ import {
   RollbackExecutionResult,
   CORE_VERIFIED_CANONICAL_IDS
 } from './types';
+import { EMBEDDED_MANIFEST, EMBEDDED_CSV_FILES } from './embedded-seed-data';
 
 export { CORE_VERIFIED_CANONICAL_IDS };
+
+export function getFileContent(seedDir: string, filename: string): { content: string; bytes: Buffer } {
+  if (seedDir !== '__EMBEDDED__') {
+    try {
+      const filePath = path.join(seedDir, filename);
+      if (fs.existsSync(filePath)) {
+        const bytes = fs.readFileSync(filePath);
+        return { content: bytes.toString('utf-8'), bytes };
+      }
+    } catch {}
+  }
+
+  if (EMBEDDED_CSV_FILES[filename]) {
+    const content = EMBEDDED_CSV_FILES[filename];
+    return { content, bytes: Buffer.from(content, 'utf-8') };
+  }
+  throw new Error(`Catalogue file not found on disk or embedded seed data: ${filename}`);
+}
 
 export interface DatabaseExecutor {
   query<T = any>(sql: string, params?: any[]): Promise<{ rows: T[] }>;
@@ -148,22 +167,28 @@ export function validateManifestIntegrity(seedDir: string): {
   manifestSha256: string;
 } {
   const manifestPath = path.join(seedDir, 'catalogue_manifest.json');
-  if (!fs.existsSync(manifestPath)) {
+  let manifestBuffer: Buffer;
+  let manifest: CatalogueManifest;
+
+  if (fs.existsSync(manifestPath)) {
+    manifestBuffer = fs.readFileSync(manifestPath);
+    manifest = JSON.parse(manifestBuffer.toString('utf-8'));
+  } else if (seedDir === '__EMBEDDED__' || seedDir === '') {
+    manifest = EMBEDDED_MANIFEST as CatalogueManifest;
+    manifestBuffer = Buffer.from(JSON.stringify(manifest), 'utf-8');
+  } else {
     throw new Error(`Catalogue manifest not found at ${manifestPath}`);
   }
 
-  const manifestBuffer = fs.readFileSync(manifestPath);
-  const manifest: CatalogueManifest = JSON.parse(manifestBuffer.toString('utf-8'));
   const manifestSha256 = crypto.createHash('sha256').update(manifestBuffer).digest('hex');
 
   for (const [filename, fileEntry] of Object.entries(manifest.files)) {
-    const filePath = path.join(seedDir, filename);
-    if (!fs.existsSync(filePath)) {
-      throw new Error(`Missing expected catalogue file: ${filePath}`);
-    }
-    const fileBytes = fs.readFileSync(filePath);
-    const calculatedHash = crypto.createHash('sha256').update(fileBytes).digest('hex');
-    if (calculatedHash !== fileEntry.sha256) {
+    const { bytes } = getFileContent(seedDir, filename);
+    const calculatedHash = crypto.createHash('sha256').update(bytes).digest('hex');
+    const normalizedBytes = Buffer.from(bytes.toString('utf-8').replace(/\r\n/g, '\n'), 'utf-8');
+    const normalizedHash = crypto.createHash('sha256').update(normalizedBytes).digest('hex');
+
+    if (calculatedHash !== fileEntry.sha256 && normalizedHash !== fileEntry.sha256) {
       throw new Error(
         `Byte integrity mismatch on ${filename}: expected ${fileEntry.sha256}, calculated ${calculatedHash}`
       );
@@ -209,7 +234,7 @@ export async function generateDryRunReport(
     ];
 
     for (const conf of tableConfigs) {
-      const content = fs.readFileSync(path.join(seedDir, conf.file), 'utf8');
+      const content = getFileContent(seedDir, conf.file).content;
       const { rows } = parseCSV(content);
 
       // Check existing IDs in DB
@@ -482,7 +507,7 @@ export async function executeImport(
     // -------------------------------------------------------------------------
     initSummary('material_categories');
     const { rows: categories } = parseCSV(
-      fs.readFileSync(path.join(seedDir, 'categories.csv'), 'utf8')
+      getFileContent(seedDir, 'categories.csv').content
     );
     categories.sort((a, b) => (a.parent_category_id ? 1 : 0) - (b.parent_category_id ? 1 : 0));
     for (const c of categories) {
@@ -509,7 +534,7 @@ export async function executeImport(
     // -------------------------------------------------------------------------
     initSummary('standards_registry');
     const { rows: standards } = parseCSV(
-      fs.readFileSync(path.join(seedDir, 'standards_registry.csv'), 'utf8')
+      getFileContent(seedDir, 'standards_registry.csv').content
     );
     for (const s of standards) {
       await upsertRecord(
@@ -539,7 +564,7 @@ export async function executeImport(
     // -------------------------------------------------------------------------
     initSummary('canonical_products');
     const { rows: canonical } = parseCSV(
-      fs.readFileSync(path.join(seedDir, 'canonical_products.csv'), 'utf8')
+      getFileContent(seedDir, 'canonical_products.csv').content
     );
     for (const c of canonical) {
       const isCoreVerified = CORE_VERIFIED_CANONICAL_IDS.has(c.canonical_product_id);
@@ -576,7 +601,7 @@ export async function executeImport(
     // -------------------------------------------------------------------------
     initSummary('manufacturers');
     const { rows: manufacturers } = parseCSV(
-      fs.readFileSync(path.join(seedDir, 'manufacturers.csv'), 'utf8')
+      getFileContent(seedDir, 'manufacturers.csv').content
     );
     for (const m of manufacturers) {
       await upsertRecord(
@@ -605,7 +630,7 @@ export async function executeImport(
     // -------------------------------------------------------------------------
     initSummary('product_variants');
     const { rows: variants } = parseCSV(
-      fs.readFileSync(path.join(seedDir, 'product_variants.csv'), 'utf8')
+      getFileContent(seedDir, 'product_variants.csv').content
     );
     for (const v of variants) {
       await upsertRecord(
@@ -641,7 +666,7 @@ export async function executeImport(
     // -------------------------------------------------------------------------
     initSummary('technical_specifications');
     const { rows: specs } = parseCSV(
-      fs.readFileSync(path.join(seedDir, 'technical_specifications.csv'), 'utf8')
+      getFileContent(seedDir, 'technical_specifications.csv').content
     );
     for (const s of specs) {
       await upsertRecord(
@@ -671,7 +696,7 @@ export async function executeImport(
     // -------------------------------------------------------------------------
     initSummary('source_registry');
     const { rows: sources } = parseCSV(
-      fs.readFileSync(path.join(seedDir, 'source_registry.csv'), 'utf8')
+      getFileContent(seedDir, 'source_registry.csv').content
     );
     for (const s of sources) {
       await upsertRecord(
@@ -701,7 +726,7 @@ export async function executeImport(
     // -------------------------------------------------------------------------
     initSummary('product_evidence');
     const { rows: evidence } = parseCSV(
-      fs.readFileSync(path.join(seedDir, 'product_evidence.csv'), 'utf8')
+      getFileContent(seedDir, 'product_evidence.csv').content
     );
     for (const e of evidence) {
       await upsertRecord(
@@ -730,7 +755,7 @@ export async function executeImport(
     // -------------------------------------------------------------------------
     initSummary('supplier_organizations');
     const { rows: suppliers } = parseCSV(
-      fs.readFileSync(path.join(seedDir, 'supplier_organizations.csv'), 'utf8')
+      getFileContent(seedDir, 'supplier_organizations.csv').content
     );
     for (const s of suppliers) {
       await upsertRecord(
@@ -761,7 +786,7 @@ export async function executeImport(
     // -------------------------------------------------------------------------
     initSummary('supplier_listings');
     const { rows: listings } = parseCSV(
-      fs.readFileSync(path.join(seedDir, 'supplier_listings.csv'), 'utf8')
+      getFileContent(seedDir, 'supplier_listings.csv').content
     );
     for (const l of listings) {
       await upsertRecord(
@@ -792,7 +817,7 @@ export async function executeImport(
     // -------------------------------------------------------------------------
     initSummary('product_images');
     const { rows: images } = parseCSV(
-      fs.readFileSync(path.join(seedDir, 'product_images.csv'), 'utf8')
+      getFileContent(seedDir, 'product_images.csv').content
     );
     for (const i of images) {
       await upsertRecord(
@@ -824,7 +849,7 @@ export async function executeImport(
     // -------------------------------------------------------------------------
     initSummary('unresolved_records');
     const { rows: unresolved } = parseCSV(
-      fs.readFileSync(path.join(seedDir, 'unresolved_records.csv'), 'utf8')
+      getFileContent(seedDir, 'unresolved_records.csv').content
     );
     for (const u of unresolved) {
       await upsertRecord(

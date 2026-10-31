@@ -11,7 +11,11 @@ import {
 } from '@/lib/catalogue/importer';
 
 function getSeedDirectory(): string {
-  return path.join(process.cwd(), 'catalogue_seed');
+  const diskPath = path.join(process.cwd(), 'catalogue_seed');
+  if (fs.existsSync(diskPath) && fs.existsSync(path.join(diskPath, 'catalogue_manifest.json'))) {
+    return diskPath;
+  }
+  return '__EMBEDDED__';
 }
 
 function getMaskedDatabaseTarget(): { host: string; database: string } {
@@ -130,116 +134,132 @@ async function getLiveTableCounts() {
 }
 
 export async function GET(req: NextRequest) {
-  const auth = await verifyAdminAuth(req);
-  if (!auth.authorized) {
-    return NextResponse.json({ error: 'Unauthorized', reason: auth.reason }, { status: 401 });
-  }
-
-  const seedDir = getSeedDirectory();
-  const db = createPrismaExecutor(prisma);
-  const target = getMaskedDatabaseTarget();
-
-  let dbVersion = 'Unknown';
   try {
-    const verRes = await prisma.$queryRaw<Array<{ version: string }>>`SELECT version();`;
-    if (verRes?.[0]?.version) {
-      dbVersion = verRes[0].version.split(' ')[0] + ' ' + (verRes[0].version.split(' ')[1] || '');
+    const auth = await verifyAdminAuth(req);
+    if (!auth.authorized) {
+      return NextResponse.json({ error: 'Unauthorized', reason: auth.reason }, { status: 401 });
     }
-  } catch {}
 
-  const currentCounts = await getLiveTableCounts();
-  const dryRun = await generateDryRunReport(seedDir, db);
+    const seedDir = getSeedDirectory();
+    const db = createPrismaExecutor(prisma);
+    const target = getMaskedDatabaseTarget();
 
-  return NextResponse.json({
-    status: 'READY_FOR_IMPORT',
-    databaseTarget: {
-      engine: 'PostgreSQL',
-      version: dbVersion,
-      hostMasked: target.host,
-      database: target.database,
-      ssl: true
-    },
-    safetyGuarantees: {
-      additiveOnly: true,
-      preservesExistingUsersAndWorkspaces: true,
-      zeroVerifiedBrandedVariants: true,
-      zeroFabricatedStockPricesOrPromises: true,
-      quarantinedImagesIsolatedFromVerifiedDisplay: true,
-      unresolvedRecordsPreservedForAuditReview: true
-    },
-    currentLiveCounts: currentCounts,
-    dryRunReport: {
-      batchNumber: dryRun.batchNumber,
-      manifestSha256: dryRun.manifestSha256,
-      totalFiles: dryRun.totalFiles,
-      status: dryRun.status,
-      errors: dryRun.errors,
-      tableBreakdown: dryRun.tables,
-      verifiedCanonicalCount: dryRun.verifiedCanonicalProductIds.length,
-      provisionalCanonicalCount: dryRun.provisionalCanonicalProductIds.length,
-      quarantinedImageCount: dryRun.quarantinedImageIdsCount
-    }
-  });
+    let dbVersion = 'Unknown';
+    try {
+      const verRes = await prisma.$queryRaw<Array<{ version: string }>>`SELECT version();`;
+      if (verRes?.[0]?.version) {
+        dbVersion = verRes[0].version.split(' ')[0] + ' ' + (verRes[0].version.split(' ')[1] || '');
+      }
+    } catch {}
+
+    const currentCounts = await getLiveTableCounts();
+    const dryRun = await generateDryRunReport(seedDir, db);
+
+    return NextResponse.json({
+      status: 'READY_FOR_IMPORT',
+      databaseTarget: {
+        engine: 'PostgreSQL',
+        version: dbVersion,
+        hostMasked: target.host,
+        database: target.database,
+        ssl: true
+      },
+      safetyGuarantees: {
+        additiveOnly: true,
+        preservesExistingUsersAndWorkspaces: true,
+        zeroVerifiedBrandedVariants: true,
+        zeroFabricatedStockPricesOrPromises: true,
+        quarantinedImagesIsolatedFromVerifiedDisplay: true,
+        unresolvedRecordsPreservedForAuditReview: true
+      },
+      currentLiveCounts: currentCounts,
+      dryRunReport: {
+        batchNumber: dryRun.batchNumber,
+        manifestSha256: dryRun.manifestSha256,
+        totalFiles: dryRun.totalFiles,
+        status: dryRun.status,
+        errors: dryRun.errors,
+        tableBreakdown: dryRun.tables,
+        verifiedCanonicalCount: dryRun.verifiedCanonicalProductIds.length,
+        provisionalCanonicalCount: dryRun.provisionalCanonicalProductIds.length,
+        quarantinedImageCount: dryRun.quarantinedImageIdsCount
+      }
+    });
+  } catch (error: any) {
+    console.error('Admin catalogue-import GET error:', error);
+    return NextResponse.json(
+      { error: 'Dry-run preflight failed', message: error?.message || String(error) },
+      { status: 500 }
+    );
+  }
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await verifyAdminAuth(req);
-  if (!auth.authorized) {
-    return NextResponse.json({ error: 'Unauthorized', reason: auth.reason }, { status: 401 });
-  }
+  try {
+    const auth = await verifyAdminAuth(req);
+    if (!auth.authorized) {
+      return NextResponse.json({ error: 'Unauthorized', reason: auth.reason }, { status: 401 });
+    }
 
-  const body = await req.json().catch(() => ({}));
-  if (body.action !== 'execute_controlled_import') {
-    return NextResponse.json(
-      {
-        error: 'Explicit confirmation required',
-        message: 'Must pass { action: "execute_controlled_import" } to trigger production write'
+    const body = await req.json().catch(() => ({}));
+    if (body.action !== 'execute_controlled_import') {
+      return NextResponse.json(
+        {
+          error: 'Explicit confirmation required',
+          message: 'Must pass { action: "execute_controlled_import" } to trigger production write'
+        },
+        { status: 400 }
+      );
+    }
+
+    const seedDir = getSeedDirectory();
+    const db = createPrismaExecutor(prisma);
+    const target = getMaskedDatabaseTarget();
+
+    // 1. Snapshot counts before import
+    const beforeCounts = await getLiveTableCounts();
+
+    // 2. Execute atomic idempotent import
+    const result = await executeImport(seedDir, db, {
+      batchNumber: `PROD-IMPORT-${new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14)}`
+    });
+
+    // 3. Snapshot counts after import
+    const afterCounts = await getLiveTableCounts();
+
+    return NextResponse.json({
+      success: result.status === 'COMPLETED',
+      batchId: result.batchId,
+      batchNumber: result.batchNumber,
+      status: result.status,
+      databaseTarget: {
+        hostMasked: target.host,
+        database: target.database
       },
-      { status: 400 }
+      executionMetrics: {
+        insertedCount: result.insertedCount,
+        updatedCount: result.updatedCount,
+        skippedCount: result.skippedCount,
+        errors: result.errors,
+        summary: result.summary
+      },
+      tableCountsBeforeAndAfter: {
+        before: beforeCounts.catalogueTables,
+        after: afterCounts.catalogueTables
+      },
+      businessDataPreserved: {
+        users: `${beforeCounts.businessData.users} -> ${afterCounts.businessData.users}`,
+        workspaces: `${beforeCounts.businessData.workspaces} -> ${afterCounts.businessData.workspaces}`,
+        sessions: `${beforeCounts.businessData.sessions} -> ${afterCounts.businessData.sessions}`,
+        requests: `${beforeCounts.businessData.requests} -> ${afterCounts.businessData.requests}`,
+        orders: `${beforeCounts.businessData.orders} -> ${afterCounts.businessData.orders}`
+      }
+    });
+  } catch (error: any) {
+    console.error('Admin catalogue-import POST error:', error);
+    return NextResponse.json(
+      { error: 'Import execution failed', message: error?.message || String(error) },
+      { status: 500 }
     );
   }
-
-  const seedDir = getSeedDirectory();
-  const db = createPrismaExecutor(prisma);
-  const target = getMaskedDatabaseTarget();
-
-  // 1. Snapshot counts before import
-  const beforeCounts = await getLiveTableCounts();
-
-  // 2. Execute atomic idempotent import
-  const result = await executeImport(seedDir, db, {
-    batchNumber: `PROD-IMPORT-${new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14)}`
-  });
-
-  // 3. Snapshot counts after import
-  const afterCounts = await getLiveTableCounts();
-
-  return NextResponse.json({
-    success: result.status === 'COMPLETED',
-    batchId: result.batchId,
-    batchNumber: result.batchNumber,
-    status: result.status,
-    databaseTarget: {
-      hostMasked: target.host,
-      database: target.database
-    },
-    executionMetrics: {
-      insertedCount: result.insertedCount,
-      updatedCount: result.updatedCount,
-      skippedCount: result.skippedCount,
-      errors: result.errors,
-      summary: result.summary
-    },
-    tableCountsBeforeAndAfter: {
-      before: beforeCounts.catalogueTables,
-      after: afterCounts.catalogueTables
-    },
-    businessDataPreserved: {
-      users: `${beforeCounts.businessData.users} -> ${afterCounts.businessData.users}`,
-      workspaces: `${beforeCounts.businessData.workspaces} -> ${afterCounts.businessData.workspaces}`,
-      sessions: `${beforeCounts.businessData.sessions} -> ${afterCounts.businessData.sessions}`,
-      requests: `${beforeCounts.businessData.requests} -> ${afterCounts.businessData.requests}`,
-      orders: `${beforeCounts.businessData.orders} -> ${afterCounts.businessData.orders}`
-    }
-  });
 }
