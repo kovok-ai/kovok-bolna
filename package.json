@@ -5,12 +5,14 @@
   "description": "Production-grade AI procurement operations platform for Indian construction materials",
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "tsx scripts/deploy_production_migrations.ts && prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
     "postinstall": "prisma generate",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
+    "db:deploy": "prisma migrate deploy",
+    "db:deploy:prod": "tsx scripts/deploy_production_migrations.ts",
     "db:seed": "tsx prisma/seed.ts",
     "catalogue:manifest": "tsx scripts/generate_manifest.ts",
     "catalogue:dry-run": "tsx scripts/import_catalogue.ts --dry-run",
@@ -23,8 +25,10 @@
     "@prisma/client": "6.19.3",
     "lucide-react": "^1.66.0",
     "next": "16.2.12",
+    "prisma": "6.19.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "tsx": "^4.19.3",
     "zod": "^3.24.2"
   },
   "devDependencies": {
@@ -32,8 +36,6 @@
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "prisma": "6.19.3",
-    "tsx": "^4.19.3",
     "typescript": "^5.7.3"
   },
   "engines": {
