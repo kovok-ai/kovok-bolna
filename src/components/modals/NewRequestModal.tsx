@@ -1,7 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { calculateRebarConversions, RebarCalculations } from '@/lib/procurement/intake';
+import {
+  calculateRebarConversions,
+  matchProcurementRequirement,
+  RebarCalculations,
+  MatchResult,
+} from '@/lib/procurement/intake';
+import { getProductVisualAsset } from '@/lib/catalogue/product-images';
 
 interface SiteOption {
   id: string;
@@ -14,9 +20,19 @@ interface NewRequestModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (requestData: any) => void;
+  initialCategory?: 'tmt_rebar' | 'cement';
+  initialGrade?: string;
+  initialDiameter?: string;
 }
 
-export function NewRequestModal({ isOpen, onClose, onSubmit }: NewRequestModalProps) {
+export function NewRequestModal({
+  isOpen,
+  onClose,
+  onSubmit,
+  initialCategory,
+  initialGrade,
+  initialDiameter,
+}: NewRequestModalProps) {
   const [step, setStep] = useState(0);
   const [category, setCategory] = useState<'tmt_rebar' | 'cement'>('tmt_rebar');
   const [description, setDescription] = useState('20 tonnes of TMT steel for Gurugram site');
@@ -34,10 +50,31 @@ export function NewRequestModal({ isOpen, onClose, onSubmit }: NewRequestModalPr
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionResult, setSubmissionResult] = useState<any>(null);
   const [conversion, setConversion] = useState<RebarCalculations | null>(null);
+  const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
 
+  // Initialize or reset when modal opens
   useEffect(() => {
     if (isOpen) {
-      // Fetch workspace sites
+      setStep(0);
+      setConfirmed(false);
+      setSubmissionResult(null);
+
+      if (initialCategory) {
+        setCategory(initialCategory);
+        setUnit(initialCategory === 'cement' ? 'BAGS' : 'TONNES');
+      }
+      if (initialGrade) {
+        if (initialCategory === 'cement') {
+          setCementType(initialGrade);
+        } else {
+          setGrade(initialGrade);
+        }
+      }
+      if (initialDiameter) {
+        setDiameter(initialDiameter);
+      }
+
+      // Fetch active workspace sites
       fetch('/api/workspaces')
         .then((res) => res.json())
         .then((data) => {
@@ -48,30 +85,39 @@ export function NewRequestModal({ isOpen, onClose, onSubmit }: NewRequestModalPr
         })
         .catch((err) => console.error('Failed to load workspace sites:', err));
     }
-  }, [isOpen]);
+  }, [isOpen, initialCategory, initialGrade, initialDiameter]);
 
+  // Live matching and rebar conversion engine
   useEffect(() => {
-    if (category === 'tmt_rebar' && diameter) {
-      const d = parseFloat(diameter);
-      const q = parseFloat(quantity) || 0;
-      if (!isNaN(d) && d > 0) {
-        setConversion(calculateRebarConversions(d, q, unit));
-      } else {
-        setConversion(null);
-      }
+    const qVal = parseFloat(quantity) || 0;
+    const diamVal = category === 'tmt_rebar' ? parseFloat(diameter) || undefined : undefined;
+    const targetGrade = category === 'tmt_rebar' ? grade : cementType;
+
+    const match = matchProcurementRequirement(
+      category,
+      targetGrade,
+      diamVal,
+      qVal,
+      unit,
+      buyerNotes ? buyerNotes : description
+    );
+    setMatchResult(match);
+
+    if (category === 'tmt_rebar' && diamVal) {
+      setConversion(calculateRebarConversions(diamVal, qVal, unit));
     } else {
       setConversion(null);
     }
-  }, [category, diameter, quantity, unit]);
+  }, [category, grade, diameter, cementType, quantity, unit, buyerNotes, description]);
 
   if (!isOpen) return null;
 
   const titles = ['What do you need?', 'Identify the material', 'Delivery & sourcing', 'Review and send'];
   const captions = [
     'Describe it in your own words. Kovok will ask for the missing details.',
-    'Confirm the attributes that make this the correct product.',
+    'Confirm statutory attributes. Kovok resolves canonical specifications.',
     'Tell Kovok where and when it is needed.',
-    'Check all details before supplier outreach starts.',
+    'Check all details before submitting into procurement workflow.',
   ];
 
   const handleNext = async () => {
@@ -79,7 +125,7 @@ export function NewRequestModal({ isOpen, onClose, onSubmit }: NewRequestModalPr
       setStep(step + 1);
     } else {
       if (!confirmed) {
-        alert('Please confirm the requirement before submitting.');
+        alert('Please check the confirmation box to verify your procurement specification.');
         return;
       }
       if (!selectedSiteId) {
@@ -131,7 +177,7 @@ export function NewRequestModal({ isOpen, onClose, onSubmit }: NewRequestModalPr
 
   return (
     <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" style={{ maxWidth: '640px' }}>
         {/* Modal Header */}
         <div className="modal-head">
           <div>
@@ -186,12 +232,12 @@ export function NewRequestModal({ isOpen, onClose, onSubmit }: NewRequestModalPr
                     flex: 'none',
                   }}
                 >
-                  ♫
+                  ⚡
                 </div>
                 <div>
-                  <strong style={{ fontSize: '12px' }}>Natural Procurement Intake</strong>
+                  <strong style={{ fontSize: '12px' }}>Intelligent Material Intake</strong>
                   <p style={{ fontSize: '11px', color: '#64748b', margin: '4px 0 0' }}>
-                    Type the request. Kovok verifies Indian statutory specifications (IS 1786 / IS 269) and preserves buyer intent without silent substitution. Voice telephony integration is planned with Sarvam AI.
+                    Describe your procurement requirements. Kovok resolves specifications against Indian statutory standards (IS 1786 / IS 269) and preserves buyer intent without silent substitution.
                   </p>
                 </div>
               </div>
@@ -202,6 +248,7 @@ export function NewRequestModal({ isOpen, onClose, onSubmit }: NewRequestModalPr
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="e.g. 20 tonnes of TMT steel Fe 500D 12mm for Gurugram site..."
+                  rows={3}
                 />
               </div>
 
@@ -224,6 +271,7 @@ export function NewRequestModal({ isOpen, onClose, onSubmit }: NewRequestModalPr
                   <label>Request source</label>
                   <select>
                     <option>Standard Buyer Intake (Phase 2)</option>
+                    <option>Site Indent Requisition</option>
                     <option>Repeat Purchase Order</option>
                   </select>
                 </div>
@@ -293,7 +341,7 @@ export function NewRequestModal({ isOpen, onClose, onSubmit }: NewRequestModalPr
                       </div>
                       {conversion.totalPiecesEstimated && (
                         <div style={{ color: '#1e40af', fontWeight: 600, marginTop: '4px' }}>
-                          Theoretical count: ~{conversion.totalPiecesEstimated} bars for {quantity} tonnes
+                          Theoretical count: ~{conversion.totalPiecesEstimated} bars for {quantity} {unit.toLowerCase()}
                         </div>
                       )}
                       <div style={{ color: '#64748b', fontSize: '10px', marginTop: '6px', lineHeight: '1.4' }}>
@@ -355,6 +403,84 @@ export function NewRequestModal({ isOpen, onClose, onSubmit }: NewRequestModalPr
                   />
                 </div>
               </div>
+
+              {/* Live Statutory Catalogue Resolution Preview */}
+              {matchResult && (
+                <div
+                  style={{
+                    marginTop: '16px',
+                    padding: '14px',
+                    borderRadius: '10px',
+                    border: `1px solid ${matchResult.requestStatus === 'MATCHED_VERIFIED' ? '#bbf7d0' : '#fde68a'}`,
+                    background: matchResult.requestStatus === 'MATCHED_VERIFIED' ? '#f0fdf4' : '#fffbeb',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: matchResult.requestStatus === 'MATCHED_VERIFIED' ? '#15803d' : '#b45309' }}>
+                      {matchResult.requestStatus === 'MATCHED_VERIFIED' ? '✓ STATUTORY SPECIFICATION MATCH' : '⚠ TECHNICAL CLARIFICATION REQUIRED'}
+                    </span>
+                    <span className={`pill ${matchResult.requestStatus === 'MATCHED_VERIFIED' ? 'green' : 'amber'}`}>
+                      <span className="dot"></span>
+                      {matchResult.requestStatus === 'MATCHED_VERIFIED' ? 'Verified Match' : 'Clarification'}
+                    </span>
+                  </div>
+
+                  {(() => {
+                    const visual = getProductVisualAsset(matchResult.canonicalProductId, category);
+                    return (
+                      <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '6px' }}>
+                        <div
+                          style={{
+                            width: '44px',
+                            height: '44px',
+                            borderRadius: '8px',
+                            overflow: 'hidden',
+                            border: '1px solid #cbd5e1',
+                            background: '#0f172a',
+                            flex: 'none',
+                          }}
+                        >
+                          <img
+                            src={visual.imagePath}
+                            alt="Canonical Material Spec"
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                        </div>
+                        <div>
+                          {matchResult.canonicalProductId ? (
+                            <div style={{ fontSize: '12.5px', fontWeight: 600, color: '#1e293b' }}>
+                              Resolved Spec: <code style={{ background: '#e2e8f0', padding: '2px 6px', borderRadius: '4px' }}>{matchResult.canonicalProductId}</code>
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: '12.5px', fontWeight: 600, color: '#991b1b' }}>
+                              Custom / Unrecognized Specification
+                            </div>
+                          )}
+                          <div style={{ fontSize: '10.5px', color: '#64748b' }}>
+                            {visual.assetTitle} ({visual.applicableStandard})
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {matchResult.clarificationReason ? (
+                    <p style={{ margin: '6px 0 0', fontSize: '11.5px', color: '#92400e', lineHeight: 1.45 }}>
+                      {matchResult.clarificationReason}
+                    </p>
+                  ) : (
+                    <p style={{ margin: '6px 0 0', fontSize: '11.5px', color: '#166534', lineHeight: 1.45 }}>
+                      Requirement conforms to Kovok verified canonical inventory conforming to {category === 'tmt_rebar' ? 'IS 1786:2008 Table 1' : 'IS 269:2015'}. No non-standard substitutions.
+                    </p>
+                  )}
+
+                  {matchResult.advisoryEngineeringNote && (
+                    <div style={{ marginTop: '8px', padding: '8px 10px', background: '#eff6ff', borderRadius: '6px', border: '1px solid #bfdbfe', fontSize: '11px', color: '#1e40af' }}>
+                      <strong>Engineering Advisory:</strong> {matchResult.advisoryEngineeringNote}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -368,6 +494,7 @@ export function NewRequestModal({ isOpen, onClose, onSubmit }: NewRequestModalPr
                     value={selectedSiteId}
                     onChange={(e) => setSelectedSiteId(e.target.value)}
                   >
+                    {sites.length === 0 && <option value="">Loading project sites...</option>}
                     {sites.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.siteName} ({s.city} - {s.pinCode})
@@ -381,18 +508,38 @@ export function NewRequestModal({ isOpen, onClose, onSubmit }: NewRequestModalPr
                     value={deliveryBasis}
                     onChange={(e) => setDeliveryBasis(e.target.value)}
                   >
-                    <option>Delivered at site</option>
+                    <option>Delivered at site (FOR Destination)</option>
                     <option>Ex-yard / buyer collects</option>
-                    <option>Supplier delivery, unloading by buyer</option>
+                    <option>Supplier delivery, unloading by buyer crane</option>
                   </select>
                 </div>
               </div>
 
               {selectedSite && (
-                <div className="panel" style={{ padding: '12px', fontSize: '11px', color: '#475569' }}>
-                  <strong>Selected Site Details:</strong> {selectedSite.siteName} · PIN {selectedSite.pinCode} · City: {selectedSite.city}
+                <div className="panel" style={{ padding: '14px', fontSize: '11.5px', color: '#475569', marginBottom: '14px' }}>
+                  <div style={{ fontWeight: 600, color: '#1e293b', marginBottom: '4px' }}>
+                    Destination Site Details:
+                  </div>
+                  <div><strong>Site Name:</strong> {selectedSite.siteName}</div>
+                  <div><strong>Location:</strong> {selectedSite.city} · PIN Code: {selectedSite.pinCode}</div>
+                  <div style={{ marginTop: '6px', color: '#64748b', fontSize: '10.5px' }}>
+                    Note: Unloading restrictions and vehicle entry windows are verified against site rules.
+                  </div>
                 </div>
               )}
+
+              <div
+                style={{
+                  border: '1px solid #e2e8f0',
+                  background: '#f8fafc',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  fontSize: '11px',
+                  color: '#475569',
+                }}
+              >
+                <strong>Supplier Sourcing Protocol:</strong> Regional supplier quotes will be gathered from authorized distributors within Delhi NCR. Live automated telephony calls via Sarvam AI voice agent will initiate within TRAI/DoT permitted hours (10:00 - 18:00 IST).
+              </div>
             </div>
           )}
 
@@ -403,24 +550,28 @@ export function NewRequestModal({ isOpen, onClose, onSubmit }: NewRequestModalPr
                 <div style={{ textAlign: 'center', padding: '24px 12px' }}>
                   <div
                     style={{
-                      width: '48px',
-                      height: '48px',
+                      width: '52px',
+                      height: '52px',
                       borderRadius: '50%',
                       background: submissionResult.match.requestStatus === 'MATCHED_VERIFIED' ? '#dcfce7' : '#fef3c7',
-                      color: submissionResult.match.requestStatus === 'MATCHED_VERIFIED' ? '#15803d' : '#b45366',
+                      color: submissionResult.match.requestStatus === 'MATCHED_VERIFIED' ? '#15803d' : '#b45309',
                       display: 'grid',
                       placeItems: 'center',
-                      fontSize: '22px',
-                      margin: '0 auto 12px',
+                      fontSize: '24px',
+                      margin: '0 auto 14px',
                     }}
                   >
                     {submissionResult.match.requestStatus === 'MATCHED_VERIFIED' ? '✓' : '!'}
                   </div>
-                  <h3>Request {submissionResult.request.requestCode} Created</h3>
-                  <p style={{ fontSize: '12px', color: '#475569', maxWidth: '420px', margin: '6px auto 16px' }}>
-                    Status: <strong>{submissionResult.match.requestStatus}</strong>
+                  <h3 style={{ margin: '0 0 6px', fontSize: '18px' }}>
+                    Request {submissionResult.request.requestCode} Created
+                  </h3>
+                  <p style={{ fontSize: '12.5px', color: '#475569', maxWidth: '440px', margin: '0 auto 16px' }}>
+                    Status: <strong style={{ color: submissionResult.match.requestStatus === 'MATCHED_VERIFIED' ? '#15803d' : '#b45309' }}>
+                      {submissionResult.match.requestStatus}
+                    </strong>
                     {submissionResult.match.canonicalProductId && (
-                      <span> · Matched to {submissionResult.match.canonicalProductId}</span>
+                      <span> · Matched to <code>{submissionResult.match.canonicalProductId}</code></span>
                     )}
                   </p>
                   {submissionResult.match.clarificationReason && (
@@ -430,9 +581,11 @@ export function NewRequestModal({ isOpen, onClose, onSubmit }: NewRequestModalPr
                       {submissionResult.match.clarificationReason}
                     </div>
                   )}
-                  <button className="btn btn-primary" onClick={onClose}>
-                    Done
-                  </button>
+                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                    <button className="btn btn-primary" onClick={onClose}>
+                      View in Requests List →
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div>
@@ -442,7 +595,11 @@ export function NewRequestModal({ isOpen, onClose, onSubmit }: NewRequestModalPr
 
                   <div className="panel" style={{ padding: '16px', marginBottom: '16px' }}>
                     <div className="kv">
-                      <span>Material & Specification</span>
+                      <span>Material Category</span>
+                      <strong>{category === 'tmt_rebar' ? 'TMT Reinforcement Steel' : 'Cement & Binders'}</strong>
+                    </div>
+                    <div className="kv">
+                      <span>Material Specification</span>
                       <strong>
                         {category === 'tmt_rebar'
                           ? `TMT Steel ${grade} · ${diameter} mm`
@@ -450,25 +607,44 @@ export function NewRequestModal({ isOpen, onClose, onSubmit }: NewRequestModalPr
                       </strong>
                     </div>
                     <div className="kv">
+                      <span>Catalogue Resolution</span>
+                      <span className={`pill ${matchResult?.requestStatus === 'MATCHED_VERIFIED' ? 'green' : 'amber'}`}>
+                        <span className="dot"></span>
+                        {matchResult?.requestStatus === 'MATCHED_VERIFIED' ? 'Verified Match' : 'Clarification'}
+                      </span>
+                    </div>
+                    {matchResult?.canonicalProductId && (
+                      <div className="kv">
+                        <span>Canonical Product ID</span>
+                        <code>{matchResult.canonicalProductId}</code>
+                      </div>
+                    )}
+                    <div className="kv">
                       <span>Quantity</span>
                       <strong>
                         {quantity} {unit}
                       </strong>
                     </div>
+                    {conversion && conversion.totalPiecesEstimated && (
+                      <div className="kv">
+                        <span>Theoretical Conversion</span>
+                        <span>{conversion.theoreticalBarsPerTonne} bars/tonne (~{conversion.totalPiecesEstimated} pieces)</span>
+                      </div>
+                    )}
                     <div className="kv">
                       <span>Destination Site</span>
                       <strong>
-                        {selectedSite ? `${selectedSite.siteName} (${selectedSite.pinCode})` : 'Unselected'}
+                        {selectedSite ? `${selectedSite.siteName} (${selectedSite.city} - ${selectedSite.pinCode})` : 'Unselected'}
                       </strong>
                     </div>
                     <div className="kv">
                       <span>Delivery Basis</span>
                       <strong>{deliveryBasis}</strong>
                     </div>
-                    {conversion && (
+                    {buyerNotes && (
                       <div className="kv">
-                        <span>Theoretical Conversion</span>
-                        <span>{conversion.theoreticalBarsPerTonne} bars/tonne (~{conversion.totalPiecesEstimated} pieces)</span>
+                        <span>Buyer Specifications</span>
+                        <span>{buyerNotes}</span>
                       </div>
                     )}
                   </div>

@@ -23,6 +23,7 @@ interface SidebarProps {
   isOpen?: boolean;
   onOpenSetup?: () => void;
   onLogout?: () => void;
+  requestCount?: number;
 }
 
 export function Sidebar({
@@ -35,6 +36,7 @@ export function Sidebar({
   isOpen = false,
   onOpenSetup,
   onLogout,
+  requestCount,
 }: SidebarProps) {
   const getInitials = (name: string) => {
     return name
@@ -103,7 +105,7 @@ export function Sidebar({
                 <circle cx="4" cy="18" r=".8" />
               </svg>
             </span>
-            Requests <span className="count">6</span>
+            Requests <span className="count">{requestCount !== undefined ? requestCount : 6}</span>
           </button>
           <button
             className={`nav-btn ${currentPage === 'quotations' ? 'active' : ''}`}

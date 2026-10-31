@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="blockTop" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e2e8f0"/>
+      <stop offset="100%" stop-color="#cbd5e1"/>
+    </linearGradient>
+    <linearGradient id="blockFront" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#cbd5e1"/>
+      <stop offset="100%" stop-color="#94a3b8"/>
+    </linearGradient>
+    <linearGradient id="blockSide" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#64748b"/>
+    </linearGradient>
+    <filter id="dropShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#000000" flood-opacity="0.55"/>
+    </filter>
+  </defs>
+
+  <rect width="800" height="600" fill="url(#bgGrad)"/>
+  
+  <g filter="url(#dropShadow)" transform="translate(160, 90)">
+    <!-- Bottom Block 1 -->
+    <g transform="translate(0, 160)">
+      <polygon points="0,60 260,60 360,0 100,0" fill="url(#blockTop)" stroke="#94a3b8" stroke-width="1.5"/>
+      <polygon points="0,60 260,60 260,180 0,180" fill="url(#blockFront)" stroke="#94a3b8" stroke-width="1.5"/>
+      <polygon points="260,60 360,0 360,120 260,180" fill="url(#blockSide)" stroke="#64748b" stroke-width="1.5"/>
+    </g>
+
+    <!-- Bottom Block 2 (Adjacent) -->
+    <g transform="translate(260, 160)">
+      <polygon points="0,60 220,60 320,0 100,0" fill="url(#blockTop)" stroke="#94a3b8" stroke-width="1.5"/>
+      <polygon points="0,60 220,60 220,180 0,180" fill="url(#blockFront)" stroke="#94a3b8" stroke-width="1.5"/>
+      <polygon points="220,60 320,0 320,120 220,180" fill="url(#blockSide)" stroke="#64748b" stroke-width="1.5"/>
+    </g>
+
+    <!-- Top Block (Stacked Precision Bond) -->
+    <g transform="translate(110, 40)">
+      <polygon points="0,60 260,60 360,0 100,0" fill="url(#blockTop)" stroke="#cbd5e1" stroke-width="2"/>
+      <polygon points="0,60 260,60 260,180 0,180" fill="url(#blockFront)" stroke="#94a3b8" stroke-width="2"/>
+      <polygon points="260,60 360,0 360,120 260,180" fill="url(#blockSide)" stroke="#64748b" stroke-width="2"/>
+      
+      <!-- Precision Dimension Annotation -->
+      <g transform="translate(30, 95)" fill="#0f172a" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif">
+        <rect x="0" y="0" width="180" height="46" rx="6" fill="#ffffff" fill-opacity="0.9" stroke="#cbd5e1"/>
+        <text x="90" y="20" font-size="12" font-weight="900" text-anchor="middle" letter-spacing="1">600 × 200 × 150 mm</text>
+        <text x="90" y="38" font-size="10" font-weight="700" text-anchor="middle" fill="#0369a1">IS 2185 (PART 3) GRADE 1</text>
+      </g>
+    </g>
+  </g>
+
+  <g transform="translate(40, 500)">
+    <rect width="720" height="70" rx="10" fill="#1e293b" fill-opacity="0.9" stroke="#334155" stroke-width="1.5"/>
+    <text x="24" y="30" fill="#f8fafc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="700">AAC Blocks &amp; Precast Masonry</text>
+    <text x="24" y="52" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12">IS 2185 (Part 3):1984 · Grade 1 Autoclaved Aerated Lightweight Concrete Blocks</text>
+    <rect x="580" y="19" width="116" height="32" rx="6" fill="#1e3a8a" stroke="#3b82f6" stroke-width="1"/>
+    <text x="638" y="40" fill="#93c5fd" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="700" text-anchor="middle">STANDARD SPEC</text>
+  </g>
+</svg>

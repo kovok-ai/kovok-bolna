@@ -4,7 +4,9 @@ import * as crypto from 'crypto';
 import { promisify } from 'util';
 
 const scryptAsync = promisify(crypto.scrypt);
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  datasourceUrl: process.env.DIRECT_URL || process.env.DATABASE_URL,
+});
 
 // Scrypt password hashing matching application auth
 export async function hashPassword(password: string): Promise<string> {

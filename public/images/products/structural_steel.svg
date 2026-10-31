@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="steelIBeam" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#475569"/>
+      <stop offset="30%" stop-color="#94a3b8"/>
+      <stop offset="70%" stop-color="#cbd5e1"/>
+      <stop offset="100%" stop-color="#334155"/>
+    </linearGradient>
+    <linearGradient id="steelChannel" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#334155"/>
+      <stop offset="50%" stop-color="#64748b"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <filter id="dropShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+
+  <rect width="800" height="600" fill="url(#bgGrad)"/>
+  
+  <g filter="url(#dropShadow)" transform="translate(140, 70)">
+    <!-- 3D Perspective Heavy ISMB Universal Beam -->
+    <!-- Top Flange -->
+    <polygon points="120,40 440,40 520,110 200,110" fill="#94a3b8" stroke="#cbd5e1" stroke-width="2"/>
+    <polygon points="120,40 120,60 200,130 200,110" fill="#475569"/>
+    
+    <!-- Vertical Web -->
+    <polygon points="190,120 190,320 210,320 210,120" fill="#64748b"/>
+    <polygon points="210,120 530,120 530,320 210,320" fill="url(#steelIBeam)" opacity="0.95"/>
+    
+    <!-- Bottom Flange -->
+    <polygon points="120,320 440,320 520,390 200,390" fill="#64748b" stroke="#94a3b8" stroke-width="2"/>
+    <polygon points="120,320 120,340 200,410 200,390" fill="#334155"/>
+    <polygon points="200,390 520,390 520,410 200,410" fill="#475569"/>
+
+    <!-- Front Cut Faces -->
+    <!-- Top flange cut -->
+    <rect x="120" y="40" width="80" height="20" rx="2" fill="#cbd5e1" stroke="#f1f5f9" stroke-width="1"/>
+    <!-- Web cut -->
+    <rect x="150" y="60" width="20" height="260" rx="2" fill="#94a3b8"/>
+    <!-- Bottom flange cut -->
+    <rect x="120" y="320" width="80" height="20" rx="2" fill="#cbd5e1" stroke="#f1f5f9" stroke-width="1"/>
+
+    <!-- Channel Section (ISMC) In Background -->
+    <g transform="translate(260, 80)">
+      <polygon points="0,0 180,0 220,40 40,40" fill="#64748b"/>
+      <polygon points="0,0 0,160 40,200 40,40" fill="#334155"/>
+      <polygon points="0,160 180,160 220,200 40,200" fill="#475569"/>
+    </g>
+
+    <!-- Hot Rolled Stamp Marking -->
+    <g transform="translate(240, 200)">
+      <rect x="0" y="0" width="160" height="40" rx="4" fill="#0f172a" fill-opacity="0.8"/>
+      <text x="80" y="24" fill="#38bdf8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="900" text-anchor="middle" letter-spacing="1.5">IS 2062:2011 E250</text>
+    </g>
+  </g>
+
+  <!-- Technical Information Overlay Bar -->
+  <g transform="translate(40, 500)">
+    <rect width="720" height="70" rx="10" fill="#1e293b" fill-opacity="0.9" stroke="#334155" stroke-width="1.5"/>
+    <text x="24" y="30" fill="#f8fafc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="700">Structural Steel &amp; Hot Rolled Sections</text>
+    <text x="24" y="52" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12">IS 2062:2011 Grade E250 / E350 · ISMB Joists, ISMC Channels, Angles &amp; Plates</text>
+    <rect x="580" y="19" width="116" height="32" rx="6" fill="#1e3a8a" stroke="#3b82f6" stroke-width="1"/>
+    <text x="638" y="40" fill="#93c5fd" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="700" text-anchor="middle">STANDARD SPEC</text>
+  </g>
+</svg>

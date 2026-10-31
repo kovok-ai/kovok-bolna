@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="steelBarGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#cbd5e1"/>
+      <stop offset="25%" stop-color="#94a3b8"/>
+      <stop offset="50%" stop-color="#e2e8f0"/>
+      <stop offset="75%" stop-color="#64748b"/>
+      <stop offset="100%" stop-color="#334155"/>
+    </linearGradient>
+    <linearGradient id="steelHighlight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f8fafc" stop-opacity="0.8"/>
+      <stop offset="50%" stop-color="#94a3b8" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#1e293b" stop-opacity="0.9"/>
+    </linearGradient>
+    <linearGradient id="ribGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#475569"/>
+      <stop offset="50%" stop-color="#f1f5f9"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="tagGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1d4ed8"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </linearGradient>
+    <filter id="dropShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="600" fill="url(#bgGrad)"/>
+  
+  <!-- Subtle Grid Lines -->
+  <g stroke="#334155" stroke-width="1" stroke-opacity="0.3">
+    <line x1="0" y1="150" x2="800" y2="150"/>
+    <line x1="0" y1="300" x2="800" y2="300"/>
+    <line x1="0" y1="450" x2="800" y2="450"/>
+    <line x1="200" y1="0" x2="200" y2="600"/>
+    <line x1="400" y1="0" x2="400" y2="600"/>
+    <line x1="600" y1="0" x2="600" y2="600"/>
+  </g>
+
+  <!-- Rebar Bundle Group -->
+  <g filter="url(#dropShadow)" transform="translate(60, 40)">
+    <!-- Lower Rebar 1 -->
+    <rect x="30" y="320" width="620" height="42" rx="21" fill="url(#steelBarGrad)"/>
+    <!-- Lower Ribs -->
+    <g fill="none" stroke="url(#ribGrad)" stroke-width="5" stroke-linecap="round">
+      <path d="M 60,323 Q 75,341 60,359 M 100,323 Q 115,341 100,359 M 140,323 Q 155,341 140,359 M 180,323 Q 195,341 180,359 M 220,323 Q 235,341 220,359 M 260,323 Q 275,341 260,359 M 300,323 Q 315,341 300,359 M 340,323 Q 355,341 340,359 M 380,323 Q 395,341 380,359 M 420,323 Q 435,341 420,359 M 460,323 Q 475,341 460,359 M 500,323 Q 515,341 500,359 M 540,323 Q 555,341 540,359 M 580,323 Q 595,341 580,359 M 620,323 Q 635,341 620,359"/>
+    </g>
+
+    <!-- Lower Rebar 2 -->
+    <rect x="50" y="250" width="600" height="46" rx="23" fill="url(#steelBarGrad)"/>
+    <g fill="none" stroke="url(#ribGrad)" stroke-width="6" stroke-linecap="round">
+      <path d="M 80,253 Q 98,273 80,293 M 125,253 Q 143,273 125,293 M 170,253 Q 188,273 170,293 M 215,253 Q 233,273 215,293 M 260,253 Q 278,273 260,293 M 305,253 Q 323,273 305,293 M 350,253 Q 368,273 350,293 M 395,253 Q 413,273 395,293 M 440,253 Q 458,273 440,293 M 485,253 Q 503,273 485,293 M 530,253 Q 548,273 530,293 M 575,253 Q 593,273 575,293 M 620,253 Q 638,273 620,293"/>
+    </g>
+
+    <!-- Main Hero Rebar (12mm Fe 500D) -->
+    <rect x="10" y="170" width="660" height="54" rx="27" fill="url(#steelBarGrad)"/>
+    <!-- Longitudinal Rib (Spine) -->
+    <line x1="20" y1="197" x2="660" y2="197" stroke="#f8fafc" stroke-width="4" stroke-opacity="0.8"/>
+    <!-- Transverse Deformed Ribs conforming to IS 1786 -->
+    <g fill="none" stroke="url(#ribGrad)" stroke-width="7" stroke-linecap="round">
+      <path d="M 40,174 Q 60,197 40,220 M 85,174 Q 105,197 85,220 M 130,174 Q 150,197 130,220 M 175,174 Q 195,197 175,220 M 220,174 Q 240,197 220,220 M 265,174 Q 285,197 265,220 M 310,174 Q 330,197 310,220 M 355,174 Q 375,197 355,220 M 400,174 Q 420,197 400,220 M 445,174 Q 465,197 445,220 M 490,174 Q 510,197 490,220 M 535,174 Q 555,197 535,220 M 580,174 Q 600,197 580,220 M 625,174 Q 645,197 625,220"/>
+    </g>
+    <!-- Steel Highlight Streak -->
+    <rect x="25" y="176" width="630" height="6" rx="3" fill="#ffffff" fill-opacity="0.7"/>
+
+    <!-- Cut End Cross Section (Circular Sheared Face) -->
+    <ellipse cx="660" cy="197" rx="14" ry="27" fill="#64748b" stroke="#cbd5e1" stroke-width="2"/>
+    <ellipse cx="660" cy="197" rx="9" ry="18" fill="#475569"/>
+    
+    <!-- Heavy Steel Strapping Band -->
+    <rect x="180" y="160" width="18" height="215" rx="3" fill="#0284c7" stroke="#38bdf8" stroke-width="1.5"/>
+    <rect x="490" y="160" width="18" height="215" rx="3" fill="#0284c7" stroke="#38bdf8" stroke-width="1.5"/>
+
+    <!-- Statutory Inspection Tag -->
+    <g transform="translate(485, 290)">
+      <polygon points="0,0 120,0 135,40 120,80 0,80" fill="url(#tagGrad)" stroke="#60a5fa" stroke-width="2"/>
+      <circle cx="15" cy="40" r="5" fill="#f8fafc"/>
+      <text x="32" y="28" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="800" letter-spacing="1">IS 1786:2008</text>
+      <text x="32" y="46" fill="#93c5fd" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="900">Fe 500D</text>
+      <text x="32" y="64" fill="#e2e8f0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" font-weight="600">HIGH DUCTILITY</text>
+    </g>
+  </g>
+
+  <!-- Technical Information Overlay Bar -->
+  <g transform="translate(40, 480)">
+    <rect width="720" height="80" rx="12" fill="#1e293b" fill-opacity="0.85" stroke="#334155" stroke-width="1.5"/>
+    
+    <text x="24" y="32" fill="#f8fafc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="700">TMT Reinforcement Steel Rebar</text>
+    <text x="24" y="56" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12">IS 1786:2008 · Standard 12m Commercial Length · High Ductility Thermo-Mechanically Treated</text>
+    
+    <rect x="580" y="24" width="116" height="32" rx="6" fill="#065f46" stroke="#10b981" stroke-width="1"/>
+    <text x="638" y="45" fill="#a7f3d0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="700" text-anchor="middle">VERIFIED SPEC</text>
+  </g>
+</svg>

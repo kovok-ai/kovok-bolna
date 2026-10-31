@@ -315,7 +315,7 @@ export async function executeImport(
     // 1. Insert ImportBatch
     await db.query(
       `INSERT INTO import_batches (id, "batchNumber", "sourceManifestSha256", status, "importedByUserId", "createdAt")
-       VALUES ($1, $2, $3, 'IMPORTING', $4, NOW());`,
+       VALUES ($1::uuid, $2, $3, 'IMPORTING', $4::uuid, NOW());`,
       [batchId, batchNumber, manifestSha256, options?.importedByUserId || null]
     );
 
@@ -329,7 +329,7 @@ export async function executeImport(
     ) {
       await db.query(
         `INSERT INTO import_batch_records (id, "batchId", "entityType", "recordId", action, "snapshotBefore", "snapshotAfter", "isHumanLocked", "createdAt")
-         VALUES ($1, $2, $3, $4, $5, $6, $7, false, NOW());`,
+         VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::jsonb, $7::jsonb, false, NOW());`,
         [
           crypto.randomUUID(),
           batchId,
@@ -340,6 +340,39 @@ export async function executeImport(
           JSON.stringify(snapshotAfter)
         ]
       );
+    }
+
+    const DATE_COLUMNS = new Set(['lastCheckedDate', 'retrievalDate', 'verificationDate']);
+    const TIMESTAMPTZ_COLUMNS = new Set(['retrievalTimestamp', 'resolvedAt']);
+    const JSONB_COLUMNS = new Set([
+      'allowedUoms',
+      'mandatoryAttributes',
+      'conversionFactors',
+      'brandNames',
+      'primaryCategories',
+      'dimensionsJson',
+      'attributesJson',
+      'technicalSpecifications',
+      'specifications',
+      'serviceGeography',
+      'authorizedPartnerships',
+      'supportedCategories',
+      'conflictingValues',
+      'missingFields',
+      'sourceIds',
+      'summary',
+      'snapshotBefore',
+      'snapshotAfter',
+      'derivedCalculations'
+    ]);
+
+    function formatPlaceholder(col: string, index: number, entity?: string): string {
+      if (DATE_COLUMNS.has(col)) return `$${index}::date`;
+      if (TIMESTAMPTZ_COLUMNS.has(col)) return `$${index}::timestamptz`;
+      if (JSONB_COLUMNS.has(col)) return `$${index}::jsonb`;
+      if (col === 'id' && (entity === 'import_batches' || entity === 'import_batch_records')) return `$${index}::uuid`;
+      if (col === 'batchId' || col === 'importedByUserId') return `$${index}::uuid`;
+      return `$${index}`;
     }
 
     // Generic, concurrency-safe, idempotent upsert helper with change detection and human-lock protection
@@ -367,7 +400,7 @@ export async function executeImport(
       if (isNew) {
         const keys = Object.keys(data);
         const cols = keys.map((k) => `"${k}"`).join(', ');
-        const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ');
+        const placeholders = keys.map((k, i) => formatPlaceholder(k, i + 1, entityType)).join(', ');
         const values = keys.map((k) => {
           const v = data[k];
           if (typeof v === 'object' && v !== null && !(v instanceof Date)) {
@@ -417,7 +450,7 @@ export async function executeImport(
       const updateKeys = Object.keys(data).filter(
         (k) => k !== 'id' && k !== 'createdAt' && k !== 'updatedAt'
       );
-      const setClauses = updateKeys.map((k, i) => `"${k}" = $${i + 2}`).join(', ');
+      const setClauses = updateKeys.map((k, i) => `"${k}" = ${formatPlaceholder(k, i + 2, entityType)}`).join(', ');
       const values = updateKeys.map((k) => {
         const v = data[k];
         if (typeof v === 'object' && v !== null && !(v instanceof Date)) {
@@ -820,7 +853,7 @@ export async function executeImport(
     await db.query(
       `UPDATE import_batches
        SET status = 'COMPLETED', summary = $1::jsonb, "completedAt" = NOW()
-       WHERE id = $2;`,
+       WHERE id = $2::uuid;`,
       [JSON.stringify(result.summary), batchId]
     );
 
@@ -861,7 +894,7 @@ export async function rollbackBatch(
     snapshotBefore: string | null;
     isHumanLocked: boolean;
   }>(
-    'SELECT * FROM import_batch_records WHERE "batchId" = $1 ORDER BY "createdAt" DESC;',
+    'SELECT * FROM import_batch_records WHERE "batchId" = $1::uuid ORDER BY "createdAt" DESC;',
     [batch.id]
   );
 
@@ -898,7 +931,7 @@ export async function rollbackBatch(
 
   await db.exec('BEGIN;');
   try {
-    await db.query("UPDATE import_batches SET status = 'ROLLING_BACK' WHERE id = $1;", [batch.id]);
+    await db.query("UPDATE import_batches SET status = 'ROLLING_BACK' WHERE id = $1::uuid;", [batch.id]);
 
     for (const record of sortedRecords) {
       if (record.isHumanLocked) {
@@ -942,7 +975,7 @@ export async function rollbackBatch(
     }
 
     const finalStatus = result.errors.length > 0 ? 'PARTIALLY_ROLLED_BACK' : 'ROLLED_BACK';
-    await db.query('UPDATE import_batches SET status = $1 WHERE id = $2;', [finalStatus, batch.id]);
+    await db.query('UPDATE import_batches SET status = $1 WHERE id = $2::uuid;', [finalStatus, batch.id]);
     await db.exec('COMMIT;');
     result.status = finalStatus;
   } catch (err) {

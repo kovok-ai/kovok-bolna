@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="roofBlue" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb"/>
+      <stop offset="50%" stop-color="#1d4ed8"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </linearGradient>
+    <filter id="dropShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#000000" flood-opacity="0.55"/>
+    </filter>
+  </defs>
+
+  <rect width="800" height="600" fill="url(#bgGrad)"/>
+  
+  <g filter="url(#dropShadow)" transform="translate(130, 90)">
+    <!-- Trapezoidal Corrugated Profile Roofing Sheet -->
+    <g transform="translate(40, 60)">
+      <!-- Trapezoidal Profile Waves -->
+      <path d="M 0,160 L 40,110 L 80,110 L 120,160 L 160,110 L 200,110 L 240,160 L 280,110 L 320,110 L 360,160 L 400,110 L 440,110 L 480,160 
+               L 520,240 L 480,240 L 440,190 L 400,190 L 360,240 L 320,190 L 280,190 L 240,240 L 200,190 L 160,190 L 120,240 L 80,190 L 40,190 L 0,240 Z" 
+            fill="url(#roofBlue)" stroke="#60a5fa" stroke-width="2"/>
+      
+      <!-- Corrugation Rib Length Extrusion -->
+      <polygon points="40,110 80,110 160,30 120,30" fill="#3b82f6" opacity="0.8"/>
+      <polygon points="160,110 200,110 280,30 240,30" fill="#3b82f6" opacity="0.8"/>
+      <polygon points="280,110 320,110 400,30 360,30" fill="#3b82f6" opacity="0.8"/>
+      <polygon points="400,110 440,110 520,30 480,30" fill="#3b82f6" opacity="0.8"/>
+
+      <!-- Specification Plate -->
+      <g transform="translate(140, 150)">
+        <rect x="0" y="0" width="200" height="48" rx="6" fill="#0f172a" fill-opacity="0.9" stroke="#38bdf8"/>
+        <text x="100" y="20" fill="#f8fafc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="900" text-anchor="middle">PPGL 0.50mm BMT</text>
+        <text x="100" y="38" fill="#38bdf8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" font-weight="700" text-anchor="middle">IS 15965:2012 AZ150 COATING</text>
+      </g>
+    </g>
+  </g>
+
+  <g transform="translate(40, 500)">
+    <rect width="720" height="70" rx="10" fill="#1e293b" fill-opacity="0.9" stroke="#334155" stroke-width="1.5"/>
+    <text x="24" y="30" fill="#f8fafc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="700">Roofing Sheets &amp; Cladding Systems</text>
+    <text x="24" y="52" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12">IS 15965:2012 Pre-painted Galvalume (PPGL) &amp; Galvanized (PPGI) Corrugated Profile Sheets</text>
+    <rect x="580" y="19" width="116" height="32" rx="6" fill="#1e3a8a" stroke="#3b82f6" stroke-width="1"/>
+    <text x="638" y="40" fill="#93c5fd" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="700" text-anchor="middle">STANDARD SPEC</text>
+  </g>
+</svg>

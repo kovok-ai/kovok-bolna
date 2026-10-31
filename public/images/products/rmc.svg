@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="drumGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="50%" stop-color="#d97706"/>
+      <stop offset="100%" stop-color="#b45309"/>
+    </linearGradient>
+    <linearGradient id="truckCab" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#cbd5e1"/>
+    </linearGradient>
+    <filter id="dropShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#000000" flood-opacity="0.55"/>
+    </filter>
+  </defs>
+
+  <rect width="800" height="600" fill="url(#bgGrad)"/>
+  
+  <g filter="url(#dropShadow)" transform="translate(130, 110)">
+    <!-- Transit Mixer Truck Chassis -->
+    <rect x="60" y="270" width="460" height="24" rx="4" fill="#334155"/>
+    
+    <!-- Wheels -->
+    <g fill="#0f172a" stroke="#64748b" stroke-width="4">
+      <circle cx="120" cy="300" r="32"/>
+      <circle cx="120" cy="300" r="16" fill="#94a3b8"/>
+      
+      <circle cx="360" cy="300" r="32"/>
+      <circle cx="360" cy="300" r="16" fill="#94a3b8"/>
+      
+      <circle cx="430" cy="300" r="32"/>
+      <circle cx="430" cy="300" r="16" fill="#94a3b8"/>
+    </g>
+
+    <!-- Truck Cab -->
+    <path d="M 60,270 L 60,170 Q 60,150 80,150 L 130,150 L 170,200 L 170,270 Z" fill="url(#truckCab)" stroke="#94a3b8" stroke-width="2"/>
+    <!-- Cab Window -->
+    <polygon points="85,165 125,165 155,200 85,200" fill="#0284c7" stroke="#38bdf8" stroke-width="1.5" opacity="0.8"/>
+
+    <!-- Concrete Mixer Rotating Drum (Elliptical Conical) -->
+    <g transform="translate(170, 70)">
+      <polygon points="20,130 180,40 290,110 240,190 60,200" fill="url(#drumGrad)" stroke="#fef3c7" stroke-width="2"/>
+      <!-- Drum Spiral Spiral Blade Ribs -->
+      <path d="M 70,80 Q 150,130 120,195" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" opacity="0.6"/>
+      <path d="M 140,55 Q 220,105 190,185" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" opacity="0.6"/>
+      
+      <!-- Concrete Discharge Chute -->
+      <polygon points="280,110 320,140 310,180 270,140" fill="#64748b" stroke="#94a3b8" stroke-width="1.5"/>
+    </g>
+
+    <!-- Quality Control Slump Cone & Workability Badge -->
+    <g transform="translate(420, 40)" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif">
+      <rect x="0" y="0" width="160" height="90" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>
+      <text x="80" y="24" fill="#f8fafc" font-size="12" font-weight="900" text-anchor="middle">DESIGN MIX M25/M30</text>
+      <text x="80" y="44" fill="#38bdf8" font-size="10" font-weight="700" text-anchor="middle">SLUMP: 100-120 mm</text>
+      <text x="80" y="62" fill="#a7f3d0" font-size="10" font-weight="700" text-anchor="middle">TRANSIT TIME &lt; 90 MINS</text>
+      <text x="80" y="80" fill="#94a3b8" font-size="9" font-weight="600" text-anchor="middle">IS 4926:2003 COMPLIANT</text>
+    </g>
+  </g>
+
+  <g transform="translate(40, 500)">
+    <rect width="720" height="70" rx="10" fill="#1e293b" fill-opacity="0.9" stroke="#334155" stroke-width="1.5"/>
+    <text x="24" y="30" fill="#f8fafc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="700">Ready-Mix Concrete (RMC)</text>
+    <text x="24" y="52" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12">IS 4926:2003 · Batching plant transit mixed concrete with computerized batch records</text>
+    <rect x="580" y="19" width="116" height="32" rx="6" fill="#1e3a8a" stroke="#3b82f6" stroke-width="1"/>
+    <text x="638" y="40" fill="#93c5fd" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="700" text-anchor="middle">STANDARD SPEC</text>
+  </g>
+</svg>

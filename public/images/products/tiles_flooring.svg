@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="tileMarble" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="40%" stop-color="#f1f5f9"/>
+      <stop offset="70%" stop-color="#e2e8f0"/>
+      <stop offset="100%" stop-color="#cbd5e1"/>
+    </linearGradient>
+    <filter id="dropShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#000000" flood-opacity="0.55"/>
+    </filter>
+  </defs>
+
+  <rect width="800" height="600" fill="url(#bgGrad)"/>
+  
+  <g filter="url(#dropShadow)" transform="translate(180, 80)">
+    <!-- 600x1200mm Large Format Glazed Vitrified Tile (GVT) in Perspective -->
+    <polygon points="40,120 340,60 420,320 120,380" fill="url(#tileMarble)" stroke="#cbd5e1" stroke-width="2"/>
+    <polygon points="120,380 420,320 420,332 120,392" fill="#94a3b8"/>
+    <polygon points="40,120 120,380 120,392 40,132" fill="#64748b"/>
+    
+    <!-- Polished Gloss Reflection Streak -->
+    <polygon points="140,80 200,68 320,340 260,352" fill="#ffffff" opacity="0.45"/>
+    
+    <!-- Subtle Italian Marble Veining -->
+    <path d="M 120,130 Q 180,180 220,240 T 320,320" fill="none" stroke="#94a3b8" stroke-width="2" opacity="0.6"/>
+    <path d="M 220,100 Q 250,150 280,220" fill="none" stroke="#94a3b8" stroke-width="1.5" opacity="0.5"/>
+
+    <!-- Spec Badge -->
+    <g transform="translate(140, 200)">
+      <rect x="0" y="0" width="180" height="48" rx="6" fill="#0f172a" fill-opacity="0.9" stroke="#334155"/>
+      <text x="90" y="20" fill="#f8fafc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="900" text-anchor="middle">600 × 1200 mm GVT</text>
+      <text x="90" y="38" fill="#38bdf8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" font-weight="700" text-anchor="middle">IS 15622:2017 GROUP B1a</text>
+    </g>
+  </g>
+
+  <g transform="translate(40, 500)">
+    <rect width="720" height="70" rx="10" fill="#1e293b" fill-opacity="0.9" stroke="#334155" stroke-width="1.5"/>
+    <text x="24" y="30" fill="#f8fafc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="700">Tiles &amp; Architectural Flooring</text>
+    <text x="24" y="52" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12">IS 15622:2017 · Double Charged &amp; Glazed Vitrified Tiles (Water absorption &lt; 0.08%)</text>
+    <rect x="580" y="19" width="116" height="32" rx="6" fill="#1e3a8a" stroke="#3b82f6" stroke-width="1"/>
+    <text x="638" y="40" fill="#93c5fd" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="700" text-anchor="middle">STANDARD SPEC</text>
+  </g>
+</svg>

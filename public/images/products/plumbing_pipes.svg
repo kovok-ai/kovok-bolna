@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="cpvcYellow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="30%" stop-color="#fde047"/>
+      <stop offset="70%" stop-color="#eab308"/>
+      <stop offset="100%" stop-color="#ca8a04"/>
+    </linearGradient>
+    <linearGradient id="upvcWhite" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="30%" stop-color="#f1f5f9"/>
+      <stop offset="70%" stop-color="#cbd5e1"/>
+      <stop offset="100%" stop-color="#94a3b8"/>
+    </linearGradient>
+    <filter id="dropShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#000000" flood-opacity="0.55"/>
+    </filter>
+  </defs>
+
+  <rect width="800" height="600" fill="url(#bgGrad)"/>
+  
+  <g filter="url(#dropShadow)" transform="translate(120, 80)">
+    <!-- CPVC SDR 11 Hot & Cold Water Distribution Pipe -->
+    <g transform="translate(0, 60)">
+      <rect x="80" y="30" width="480" height="48" rx="24" fill="url(#cpvcYellow)"/>
+      <!-- Continuous Red Stripe (CPVC Indicator) -->
+      <line x1="80" y1="54" x2="560" y2="54" stroke="#dc2626" stroke-width="4"/>
+      <!-- Hollow Socket End -->
+      <ellipse cx="80" cy="54" rx="12" ry="24" fill="#ca8a04" stroke="#fde047" stroke-width="2"/>
+      <ellipse cx="80" cy="54" rx="7" ry="16" fill="#0f172a"/>
+
+      <!-- Pipe Specification Print -->
+      <text x="240" y="46" fill="#713f12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" font-weight="800" letter-spacing="1">KOVOK CPVC PRO SDR 11 · IS 15778 · CLASS 1 (HOT &amp; COLD 82°C)</text>
+    </g>
+
+    <!-- UPVC Plumbing Pipe -->
+    <g transform="translate(30, 140)">
+      <rect x="70" y="30" width="460" height="42" rx="21" fill="url(#upvcWhite)"/>
+      <!-- Continuous Blue Stripe (UPVC Cold Potable Water) -->
+      <line x1="70" y1="51" x2="530" y2="51" stroke="#2563eb" stroke-width="3"/>
+      <ellipse cx="70" cy="51" rx="10" ry="21" fill="#94a3b8" stroke="#cbd5e1" stroke-width="2"/>
+      <ellipse cx="70" cy="51" rx="6" ry="14" fill="#0f172a"/>
+
+      <text x="220" y="45" fill="#1e293b" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="9" font-weight="800" letter-spacing="1">UPVC PRESSURE PIPE · IS 4985 · SCH 40</text>
+    </g>
+
+    <!-- Brass Threaded Elbow Fitting -->
+    <g transform="translate(380, 220)">
+      <!-- PVC Elbow Body -->
+      <path d="M 40,40 L 90,40 Q 110,40 110,60 L 110,110 L 80,110 L 80,70 L 40,70 Z" fill="#fde047" stroke="#ca8a04" stroke-width="2"/>
+      <!-- Female Brass Thread Insert -->
+      <rect x="25" y="42" width="20" height="26" rx="2" fill="#d97706" stroke="#f59e0b" stroke-width="1.5"/>
+      <line x1="28" y1="46" x2="28" y2="64" stroke="#78350f" stroke-width="1.5"/>
+      <line x1="33" y1="46" x2="33" y2="64" stroke="#78350f" stroke-width="1.5"/>
+      <line x1="38" y1="46" x2="38" y2="64" stroke="#78350f" stroke-width="1.5"/>
+    </g>
+  </g>
+
+  <g transform="translate(40, 500)">
+    <rect width="720" height="70" rx="10" fill="#1e293b" fill-opacity="0.9" stroke="#334155" stroke-width="1.5"/>
+    <text x="24" y="30" fill="#f8fafc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="700">PVC, CPVC &amp; UPVC Plumbing Systems</text>
+    <text x="24" y="52" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12">IS 15778 (Chlorinated Polyvinyl Chloride) &amp; IS 4985 (Unplasticized PVC Pipes)</text>
+    <rect x="580" y="19" width="116" height="32" rx="6" fill="#1e3a8a" stroke="#3b82f6" stroke-width="1"/>
+    <text x="638" y="40" fill="#93c5fd" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="700" text-anchor="middle">STANDARD SPEC</text>
+  </g>
+</svg>

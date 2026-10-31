@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="clayTop" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ea580c"/>
+      <stop offset="100%" stop-color="#c2410c"/>
+    </linearGradient>
+    <linearGradient id="clayFront" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#c2410c"/>
+      <stop offset="100%" stop-color="#9a3412"/>
+    </linearGradient>
+    <linearGradient id="claySide" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#9a3412"/>
+      <stop offset="100%" stop-color="#7c2d12"/>
+    </linearGradient>
+    <filter id="dropShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#000000" flood-opacity="0.55"/>
+    </filter>
+  </defs>
+
+  <rect width="800" height="600" fill="url(#bgGrad)"/>
+  
+  <g filter="url(#dropShadow)" transform="translate(180, 110)">
+    <!-- Base Clay Brick -->
+    <g transform="translate(0, 140)">
+      <polygon points="0,50 280,50 380,0 100,0" fill="url(#clayTop)" stroke="#9a3412" stroke-width="1.5"/>
+      <polygon points="0,50 280,50 280,150 0,150" fill="url(#clayFront)" stroke="#7c2d12" stroke-width="1.5"/>
+      <polygon points="280,50 380,0 380,100 280,150" fill="url(#claySide)" stroke="#7c2d12" stroke-width="1.5"/>
+      <!-- Frog Indentation on Top Face -->
+      <polygon points="70,30 230,30 270,12 110,12" fill="#7c2d12" stroke="#431407" stroke-width="1.5"/>
+    </g>
+
+    <!-- Top Stacked Clay Brick (IS 1077 Standard) -->
+    <g transform="translate(70, 20)">
+      <polygon points="0,50 280,50 380,0 100,0" fill="url(#clayTop)" stroke="#ea580c" stroke-width="2"/>
+      <polygon points="0,50 280,50 280,150 0,150" fill="url(#clayFront)" stroke="#9a3412" stroke-width="2"/>
+      <polygon points="280,50 380,0 380,100 280,150" fill="url(#claySide)" stroke="#7c2d12" stroke-width="2"/>
+      
+      <!-- Prominent Frog with Brand / Standard Indentation -->
+      <polygon points="70,30 230,30 270,12 110,12" fill="#7c2d12" stroke="#431407" stroke-width="2"/>
+      <text x="170" y="24" fill="#fdba74" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="900" text-anchor="middle" letter-spacing="2">IS 1077</text>
+
+      <!-- Dimension Badge -->
+      <g transform="translate(30, 80)" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif">
+        <rect x="0" y="0" width="180" height="42" rx="6" fill="#0f172a" fill-opacity="0.85"/>
+        <text x="90" y="18" font-size="12" font-weight="900" text-anchor="middle">230 × 115 × 75 mm</text>
+        <text x="90" y="34" font-size="9" font-weight="700" text-anchor="middle" fill="#fdba74">CLASS 105 COMMON BURNT CLAY</text>
+      </g>
+    </g>
+  </g>
+
+  <g transform="translate(40, 500)">
+    <rect width="720" height="70" rx="10" fill="#1e293b" fill-opacity="0.9" stroke="#334155" stroke-width="1.5"/>
+    <text x="24" y="30" fill="#f8fafc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="700">Bricks &amp; Concrete Masonry Blocks</text>
+    <text x="24" y="52" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12">IS 1077:1992 Class 7.5/10.5 Common Burnt Clay Bricks &amp; Fly Ash Lime Bricks (IS 12894)</text>
+    <rect x="580" y="19" width="116" height="32" rx="6" fill="#1e3a8a" stroke="#3b82f6" stroke-width="1"/>
+    <text x="638" y="40" fill="#93c5fd" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="700" text-anchor="middle">STANDARD SPEC</text>
+  </g>
+</svg>

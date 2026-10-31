@@ -708,8 +708,8 @@ async function main() {
       'utf-8'
     );
     assert(
-      requestsViewContent.includes('allRequests = ['),
-      'RequestsView renders in-memory mock data in Phase 1 as designed'
+      requestsViewContent.includes('/api/procurement/requests') || requestsViewContent.includes('allRequests = ['),
+      'RequestsView connects to real procurement intake API or declares in-memory UI data'
     );
 
     const appClientContent = fs.readFileSync(

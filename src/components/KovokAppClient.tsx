@@ -38,8 +38,15 @@ export function KovokAppClient({
 }: KovokAppClientProps) {
   const router = useRouter();
   const [currentPage, setCurrentPage] = useState<PageId>('overview');
+  const [selectedRequestCode, setSelectedRequestCode] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isNewRequestOpen, setIsNewRequestOpen] = useState(false);
+  const [newRequestDefaults, setNewRequestDefaults] = useState<{
+    category: 'tmt_rebar' | 'cement';
+    grade?: string;
+    diameter?: string;
+  } | null>(null);
+  const [requestsRefreshKey, setRequestsRefreshKey] = useState(0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -58,7 +65,15 @@ export function KovokAppClient({
   };
 
   const handleNewRequestSubmit = (data: any) => {
-    showToast(`Request submitted for ${data.quantity} ${data.unit} ${data.category.toUpperCase()}. Sourcing outreach queued.`);
+    setRequestsRefreshKey((k) => k + 1);
+    const code = data?.requestCode ? `[${data.requestCode}] ` : '';
+    const qty = data?.quantityValue ?? data?.quantity ?? '';
+    const unit = data?.quantityUnit ?? data?.unit ?? '';
+    const cat = (data?.category ?? '').toUpperCase();
+    if (data?.requestCode) {
+      setSelectedRequestCode(data.requestCode);
+    }
+    showToast(`Request ${code}created: ${qty} ${unit} ${cat}. Sourcing outreach queued.`);
     setCurrentPage('requests');
   };
 
@@ -98,7 +113,10 @@ export function KovokAppClient({
           workspaceName={initialWorkspace.name}
           currentPageTitle={pageTitles[currentPage]}
           isSandbox={initialWorkspace.isSandbox}
-          onNewRequest={() => setIsNewRequestOpen(true)}
+          onNewRequest={() => {
+            setNewRequestDefaults(null);
+            setIsNewRequestOpen(true);
+          }}
           onToggleMenu={() => setIsSidebarOpen(!isSidebarOpen)}
           onSearch={(q) => {
             const query = q.toLowerCase();
@@ -109,22 +127,37 @@ export function KovokAppClient({
             else setCurrentPage('requests');
             showToast(`Filtering for “${q}”…`);
           }}
-          onHelp={() => showToast('Kovok Procurement Foundation: Phase 1 active. Multi-tenant database and session auth enabled.')}
+          onHelp={() => showToast('Kovok Procurement Foundation: Phase 1 & 2 active. Real PostgreSQL, canonical catalogue, and procurement intake enabled.')}
         />
 
         <div className="page">
           {currentPage === 'overview' && (
             <OverviewView
               onNavigate={(page) => setCurrentPage(page as PageId)}
-              onOpenRecovery={() => setCurrentPage('exceptions')}
+              onOpenNewRequest={(params) => {
+                setNewRequestDefaults(params || null);
+                setIsNewRequestOpen(true);
+              }}
+              onOpenRequest={(code) => {
+                setSelectedRequestCode(code);
+                setCurrentPage('requests');
+              }}
               workspaceSubtitle={initialWorkspace.serviceArea}
             />
           )}
 
           {currentPage === 'requests' && (
             <RequestsView
-              onOpenRequest={(code) => showToast(`Opening request ${code}. Commercial offers ready for review.`)}
-              onImport={() => showToast('Importing purchase requests: Phase 5 ERP/CSV integration.')}
+              initialSelectedCode={selectedRequestCode}
+              refreshTrigger={requestsRefreshKey}
+              onNewRequest={() => {
+                setNewRequestDefaults(null);
+                setIsNewRequestOpen(true);
+              }}
+              onOpenRequest={(code) => {
+                setSelectedRequestCode(code);
+                showToast(`Opening request ${code}. Commercial offers ready for review.`);
+              }}
             />
           )}
 
@@ -152,10 +185,21 @@ export function KovokAppClient({
             <CatalogView
               onAddProduct={() => showToast('Proposing new provisional product for review.')}
               onImport={() => showToast('Importing product catalogue list...')}
+              onInitiateRequest={(params) => {
+                setNewRequestDefaults(params);
+                setIsNewRequestOpen(true);
+              }}
             />
           )}
 
-          {currentPage === 'suppliers' && <SuppliersView />}
+          {currentPage === 'suppliers' && (
+            <SuppliersView
+              onInitiateProcurement={(params) => {
+                setNewRequestDefaults(params || null);
+                setIsNewRequestOpen(true);
+              }}
+            />
+          )}
 
           {currentPage === 'integrations' && <IntegrationsView />}
 
@@ -168,8 +212,14 @@ export function KovokAppClient({
       {/* New Request Modal */}
       <NewRequestModal
         isOpen={isNewRequestOpen}
-        onClose={() => setIsNewRequestOpen(false)}
+        onClose={() => {
+          setIsNewRequestOpen(false);
+          setNewRequestDefaults(null);
+        }}
         onSubmit={handleNewRequestSubmit}
+        initialCategory={newRequestDefaults?.category}
+        initialGrade={newRequestDefaults?.grade}
+        initialDiameter={newRequestDefaults?.diameter}
       />
 
       {/* Toast Notification */}

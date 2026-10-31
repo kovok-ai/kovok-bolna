@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="pipeZinc" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#e2e8f0"/>
+      <stop offset="30%" stop-color="#f8fafc"/>
+      <stop offset="70%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <linearGradient id="pipeDark" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#64748b"/>
+      <stop offset="30%" stop-color="#94a3b8"/>
+      <stop offset="70%" stop-color="#475569"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <filter id="dropShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#000000" flood-opacity="0.55"/>
+    </filter>
+  </defs>
+
+  <rect width="800" height="600" fill="url(#bgGrad)"/>
+  
+  <g filter="url(#dropShadow)" transform="translate(120, 80)">
+    <!-- Round GI Pipe (Galvanized Zinc) -->
+    <g transform="translate(0, 50)">
+      <rect x="80" y="30" width="460" height="55" rx="27" fill="url(#pipeZinc)"/>
+      <line x1="80" y1="45" x2="540" y2="45" stroke="#ffffff" stroke-width="3" opacity="0.8"/>
+      <!-- Hollow Sheared Ends -->
+      <ellipse cx="80" cy="57" rx="14" ry="27" fill="#475569" stroke="#94a3b8" stroke-width="2"/>
+      <ellipse cx="80" cy="57" rx="8" ry="18" fill="#0f172a"/>
+    </g>
+
+    <!-- Medium Round Pipe -->
+    <g transform="translate(40, 130)">
+      <rect x="60" y="30" width="480" height="45" rx="22" fill="url(#pipeDark)"/>
+      <line x1="60" y1="42" x2="540" y2="42" stroke="#ffffff" stroke-width="2.5" opacity="0.7"/>
+      <ellipse cx="60" cy="52" rx="12" ry="22" fill="#334155" stroke="#64748b" stroke-width="2"/>
+      <ellipse cx="60" cy="52" rx="7" ry="14" fill="#0f172a"/>
+    </g>
+
+    <!-- Square Hollow Section (SHS) -->
+    <g transform="translate(20, 210)">
+      <polygon points="50,15 500,15 540,45 90,45" fill="#cbd5e1" stroke="#94a3b8" stroke-width="1.5"/>
+      <polygon points="50,15 50,75 500,75 500,15" fill="url(#pipeZinc)" stroke="#94a3b8" stroke-width="1.5"/>
+      <polygon points="500,15 500,75 540,105 540,45" fill="#475569" stroke="#334155" stroke-width="1.5"/>
+      
+      <!-- Hollow Face -->
+      <polygon points="50,15 90,45 90,105 50,75" fill="#334155"/>
+      <polygon points="60,25 80,40 80,85 60,70" fill="#0f172a"/>
+
+      <!-- BIS Spec Badge -->
+      <g transform="translate(200, 30)">
+        <rect x="0" y="0" width="160" height="32" rx="4" fill="#0f172a" fill-opacity="0.8"/>
+        <text x="80" y="21" fill="#38bdf8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="900" text-anchor="middle">IS 4923 / IS 1161</text>
+      </g>
+    </g>
+  </g>
+
+  <g transform="translate(40, 500)">
+    <rect width="720" height="70" rx="10" fill="#1e293b" fill-opacity="0.9" stroke="#334155" stroke-width="1.5"/>
+    <text x="24" y="30" fill="#f8fafc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="700">MS &amp; GI Steel Pipes &amp; Hollow Sections</text>
+    <text x="24" y="52" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12">IS 1239:2004 (Mild Steel Tubes) &amp; IS 1161:2014 (Structural Hollow Sections)</text>
+    <rect x="580" y="19" width="116" height="32" rx="6" fill="#1e3a8a" stroke="#3b82f6" stroke-width="1"/>
+    <text x="638" y="40" fill="#93c5fd" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="700" text-anchor="middle">STANDARD SPEC</text>
+  </g>
+</svg>

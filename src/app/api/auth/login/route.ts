@@ -104,7 +104,6 @@ export async function POST(req: NextRequest) {
         where: { userId: user.id },
         include: {
           workspace: true,
-          role: true,
         },
       });
     });
@@ -118,6 +117,13 @@ export async function POST(req: NextRequest) {
         { status: 403 }
       );
     }
+
+    // Resolve user's role within the active workspace tenant context under RLS
+    const activeRole = await withTenantContext(defaultMembership.workspaceId, async (tx) => {
+      return await tx.workspaceRole.findUnique({
+        where: { id: defaultMembership.roleId },
+      });
+    });
 
     // 3. Create session
     const { sessionToken, expiresAt } = await createSession({
@@ -163,7 +169,7 @@ export async function POST(req: NextRequest) {
         name: defaultMembership.workspace.name,
         slug: defaultMembership.workspace.slug,
       },
-      role: defaultMembership.role.name,
+      role: activeRole?.name ?? 'MEMBER',
     });
   } catch (error) {
     console.error('Login error:', error);

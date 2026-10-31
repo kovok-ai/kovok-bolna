@@ -1,11 +1,16 @@
 import path from 'path';
-import { prisma } from '../src/lib/db';
+import { PrismaClient } from '@prisma/client';
+import { prisma as defaultPrisma } from '../src/lib/db';
 import { generateDryRunReport, executeImport, createPrismaExecutor } from '../src/lib/catalogue/importer';
+
+const adminPrisma = process.env.DIRECT_URL
+  ? new PrismaClient({ datasourceUrl: process.env.DIRECT_URL })
+  : defaultPrisma;
 
 async function main() {
   const isDryRun = process.argv.includes('--dry-run');
   const seedDir = path.join(process.cwd(), 'catalogue_seed');
-  const db = createPrismaExecutor(prisma);
+  const db = createPrismaExecutor(adminPrisma);
 
   console.log('=================================================================');
   console.log('   KOVOK CONTROLLED CATALOGUE STAGING IMPORT PIPELINE             ');
@@ -49,5 +54,5 @@ main()
     process.exit(1);
   })
   .finally(async () => {
-    await prisma.$disconnect();
+    await adminPrisma.$disconnect().catch(() => null);
   });
