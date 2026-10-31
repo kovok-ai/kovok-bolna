@@ -1,12 +1,11 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { ArrowRight, KeyRound } from 'lucide-react';
 
 export default function LoginPage() {
-  const router = useRouter();
-  const [email, setEmail] = useState('shiwang@concreteandco.in');
-  const [password, setPassword] = useState('KovokSecure2026!');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -19,23 +18,29 @@ export default function LoginPage() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: email.trim(), password }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || 'Authentication failed. Please check credentials.');
+        setError(data.error || 'Authentication failed. Please verify credentials.');
         setLoading(false);
         return;
       }
 
-      router.push('/');
-      router.refresh();
+      // Perform clean full navigation to guarantee browser session cookie is committed
+      window.location.href = '/';
     } catch {
       setError('Network error. Unable to connect to authentication server.');
       setLoading(false);
     }
+  };
+
+  const fillDemoAccount = () => {
+    setEmail('demo@kovok.test');
+    setPassword('DemoEvaluation2026!');
+    setError(null);
   };
 
   return (
@@ -117,11 +122,45 @@ export default function LoginPage() {
             type="submit"
             className="btn btn-primary"
             disabled={loading}
-            style={{ width: '100%', marginTop: '6px' }}
+            style={{ width: '100%', marginTop: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
           >
-            {loading ? 'Authenticating...' : 'Sign In →'}
+            {loading ? 'Authenticating...' : (
+              <>
+                Sign In <ArrowRight size={14} />
+              </>
+            )}
           </button>
         </form>
+
+        {/* Evaluation / Demo Access Option */}
+        <div
+          style={{
+            marginTop: '16px',
+            padding: '10px 12px',
+            background: '#f8fafc',
+            border: '1px dashed #cbd5e1',
+            borderRadius: '8px',
+            fontSize: '11px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div>
+            <strong style={{ color: '#0f172a', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <KeyRound size={12} /> Safe Demo Account
+            </strong>
+            <span style={{ color: '#64748b' }}>Pre-configured buyer evaluation workspace</span>
+          </div>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={fillDemoAccount}
+            style={{ fontSize: '11px', padding: '4px 10px' }}
+          >
+            Fill Demo
+          </button>
+        </div>
 
         <div className="divider" style={{ margin: '20px 0 16px' }} />
 

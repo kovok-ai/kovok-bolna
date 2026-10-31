@@ -138,7 +138,6 @@ async function main() {
   // 4. Seed Development Admin User
   const adminPasswordHash = await hashPassword('KovokSecure2026!');
   const adminUser = await prisma.user.upsert({
-
     where: { email: 'shiwang@concreteandco.in' },
     update: {},
     create: {
@@ -151,7 +150,22 @@ async function main() {
     },
   });
 
-  // 5. Link User to Workspace as OWNER
+  // 4b. Seed Designated Demo Evaluation User (Clearly marked temporary demo account)
+  const demoPasswordHash = await hashPassword('DemoEvaluation2026!');
+  const demoUser = await prisma.user.upsert({
+    where: { email: 'demo@kovok.test' },
+    update: { passwordHash: demoPasswordHash },
+    create: {
+      id: '44444444-4444-4444-4444-444444444441',
+      email: 'demo@kovok.test',
+      name: 'Demo Evaluation Buyer',
+      passwordHash: demoPasswordHash,
+      phone: '+919999900000',
+      status: 'ACTIVE',
+    },
+  });
+
+  // 5. Link Users to Workspace as OWNER
   await prisma.workspaceMembership.upsert({
     where: {
       workspaceId_userId: {
@@ -163,6 +177,22 @@ async function main() {
     create: {
       workspaceId: workspace.id,
       userId: adminUser.id,
+      roleId: ownerRole.id,
+      isDefault: true,
+    },
+  });
+
+  await prisma.workspaceMembership.upsert({
+    where: {
+      workspaceId_userId: {
+        workspaceId: workspace.id,
+        userId: demoUser.id,
+      },
+    },
+    update: {},
+    create: {
+      workspaceId: workspace.id,
+      userId: demoUser.id,
       roleId: ownerRole.id,
       isDefault: true,
     },

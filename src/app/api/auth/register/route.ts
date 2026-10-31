@@ -18,8 +18,12 @@ export async function POST(req: NextRequest) {
     const parsed = registerWorkspaceSchema.safeParse(body);
 
     if (!parsed.success) {
+      const firstIssue = parsed.error.issues[0];
+      const errorMessage = firstIssue
+        ? `${firstIssue.path.join('.') || 'input'}: ${firstIssue.message}`
+        : 'Invalid input data';
       return NextResponse.json(
-        { error: 'Invalid input', details: parsed.error.format() },
+        { error: errorMessage, details: parsed.error.flatten() },
         { status: 400 }
       );
     }
@@ -34,10 +38,13 @@ export async function POST(req: NextRequest) {
 
     if (existingUser) {
       return NextResponse.json(
-        { error: 'A user with this email address already exists. Please log in.' },
+        { error: 'An account with this email address already exists. Please log in.' },
         { status: 409 }
       );
     }
+
+    // Hash password before starting database transaction to avoid holding locks during CPU-heavy scrypt
+    const hashedPassword = await hashPassword(password);
 
     // 2. Generate unique slug
     let baseSlug = slugify(workspaceName) || 'workspace';
@@ -46,6 +53,11 @@ export async function POST(req: NextRequest) {
     while (await prisma.workspace.findUnique({ where: { slug } })) {
       slug = `${baseSlug}-${counter++}`;
     }
+
+    // Sanitize network identifiers
+    const rawIp = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? undefined;
+    const clientIp = rawIp ? rawIp.split(',')[0].trim().slice(0, 64) : undefined;
+    const userAgent = req.headers.get('user-agent')?.slice(0, 500) ?? undefined;
 
     // 3. Provision Workspace, User, Roles, Sites & Rule Profile in Transaction
     const result = await prisma.$transaction(async (tx) => {
@@ -91,7 +103,6 @@ export async function POST(req: NextRequest) {
       });
 
       // c. Create User
-      const hashedPassword = await hashPassword(password);
       const user = await tx.user.create({
         data: {
           name: adminName.trim(),
@@ -101,7 +112,6 @@ export async function POST(req: NextRequest) {
           status: 'ACTIVE',
         },
       });
-
 
       // d. Create Membership
       await tx.workspaceMembership.create({
@@ -117,10 +127,11 @@ export async function POST(req: NextRequest) {
       await tx.projectSite.create({
         data: {
           workspaceId: workspace.id,
-          siteName: `${workspaceName} — Site A`,
+          siteName: `${workspaceName.trim()} — Site A`,
           pinCode: '110001',
           city: serviceArea.split('·')[0].trim() || 'Delhi NCR',
           address: `${serviceArea} Central Receiving Yard`,
+          isDefault: true,
         },
       });
 
@@ -151,6 +162,8 @@ export async function POST(req: NextRequest) {
           action: 'WORKSPACE_PROVISIONED',
           entityType: 'Workspace',
           entityId: workspace.id,
+          clientIp,
+          userAgent,
         },
       });
 
@@ -158,13 +171,10 @@ export async function POST(req: NextRequest) {
     });
 
     // 4. Create Session & Cookie
-    const ipAddress = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? undefined;
-    const userAgent = req.headers.get('user-agent') ?? undefined;
-
     const { sessionToken, expiresAt } = await createSession({
       userId: result.user.id,
       workspaceId: result.workspace.id,
-      ipAddress,
+      ipAddress: clientIp,
       userAgent,
     });
 
@@ -183,11 +193,26 @@ export async function POST(req: NextRequest) {
         slug: result.workspace.slug,
       },
       role: result.role.name,
-    });
-  } catch (error) {
+    }, { status: 201 });
+  } catch (error: any) {
     console.error('Registration error:', error);
+    if (error?.code === 'P2002') {
+      const target = (error?.meta?.target as string[]) || [];
+      if (target.includes('email') || error?.message?.includes('email')) {
+        return NextResponse.json(
+          { error: 'An account with this email address already exists. Please log in.' },
+          { status: 409 }
+        );
+      }
+      if (target.includes('slug') || error?.message?.includes('slug')) {
+        return NextResponse.json(
+          { error: 'A workspace with this name already exists. Please choose a different business name.' },
+          { status: 409 }
+        );
+      }
+    }
     return NextResponse.json(
-      { error: 'An unexpected error occurred during workspace provisioning' },
+      { error: 'An unexpected error occurred during workspace provisioning. Please check inputs and try again.' },
       { status: 500 }
     );
   }

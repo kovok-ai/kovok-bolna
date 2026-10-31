@@ -45,11 +45,12 @@ export function resetLoginRateLimit(key: string) {
 
 export async function POST(req: NextRequest) {
   try {
-    const ipAddress = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? 'unknown-ip';
-    const userAgent = req.headers.get('user-agent') ?? undefined;
+    const rawIp = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? '127.0.0.1';
+    const clientIp = rawIp.split(',')[0].trim().slice(0, 64);
+    const userAgent = req.headers.get('user-agent')?.slice(0, 500) ?? undefined;
 
     // 0. Check rate limiting by client IP
-    const rateCheck = checkLoginRateLimit(ipAddress);
+    const rateCheck = checkLoginRateLimit(clientIp);
     if (!rateCheck.allowed) {
       return NextResponse.json(
         { error: `Too many failed login attempts. Please try again in ${rateCheck.retryAfterSeconds} seconds.` },
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest) {
 
     if (!parsed.success) {
       return NextResponse.json(
-        { error: 'Invalid input', details: parsed.error.format() },
+        { error: 'Please enter a valid email address and password.' },
         { status: 400 }
       );
     }
@@ -78,7 +79,7 @@ export async function POST(req: NextRequest) {
     const isPasswordValid = user ? await verifyPassword(password, user.passwordHash) : false;
 
     if (!user || !isPasswordValid) {
-      recordFailedLogin(ipAddress);
+      recordFailedLogin(clientIp);
       recordFailedLogin(normalizedEmail);
       return NextResponse.json(
         { error: 'Invalid email or password' },
@@ -87,12 +88,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Reset rate limit on successful credentials
-    resetLoginRateLimit(ipAddress);
+    resetLoginRateLimit(clientIp);
     resetLoginRateLimit(normalizedEmail);
 
     if (user.status !== 'ACTIVE') {
       return NextResponse.json(
-        { error: 'User account is suspended' },
+        { error: 'Your account is suspended. Please contact support.' },
         { status: 403 }
       );
     }
@@ -113,7 +114,7 @@ export async function POST(req: NextRequest) {
 
     if (!defaultMembership) {
       return NextResponse.json(
-        { error: 'No workspace assigned to this user' },
+        { error: 'No workspace assigned to this user. Please register a new workspace or request an invitation.' },
         { status: 403 }
       );
     }
@@ -129,7 +130,7 @@ export async function POST(req: NextRequest) {
     const { sessionToken, expiresAt } = await createSession({
       userId: user.id,
       workspaceId: defaultMembership.workspaceId,
-      ipAddress,
+      ipAddress: clientIp,
       userAgent,
     });
 
@@ -146,14 +147,12 @@ export async function POST(req: NextRequest) {
             action: 'LOGIN',
             entityType: 'User',
             entityId: user.id,
-            clientIp: ipAddress,
+            clientIp,
             userAgent,
           },
         });
       });
     } catch (auditErr) {
-      // Architectural decision: Do not lock out user on transient audit log failure,
-      // but ensure failure is clearly observable in system diagnostics.
       console.error('[SECURITY_AUDIT_WARNING] Failed to record login audit log:', auditErr);
     }
 

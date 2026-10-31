@@ -143,11 +143,20 @@ export async function revokeSession(sessionToken: string): Promise<void> {
 // 3. HTTP-ONLY SECURE COOKIE HELPERS
 // -----------------------------------------------------------------------------
 
+export function isSecureCookie(): boolean {
+  if (process.env.COOKIE_SECURE === 'true') return true;
+  if (process.env.COOKIE_SECURE === 'false') return false;
+  // When running with explicit HTTPS APP_BASE_URL in production deployments
+  if (process.env.APP_BASE_URL?.startsWith('https://')) return true;
+  // Allow HTTP during local development and testing on localhost / private IPs
+  return false;
+}
+
 export async function setSessionCookie(sessionToken: string, expiresAt: Date) {
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE_NAME, sessionToken, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isSecureCookie(),
     sameSite: 'lax',
     path: '/',
     expires: expiresAt,
@@ -158,7 +167,7 @@ export async function clearSessionCookie() {
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE_NAME, '', {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isSecureCookie(),
     sameSite: 'lax',
     path: '/',
     maxAge: 0,

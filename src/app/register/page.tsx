@@ -1,10 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { ArrowRight } from 'lucide-react';
 
 export default function RegisterPage() {
-  const router = useRouter();
   const [workspaceName, setWorkspaceName] = useState('');
   const [businessType, setBusinessType] = useState('Contractor / Builder');
   const [serviceArea, setServiceArea] = useState('Delhi NCR · 2 sites');
@@ -25,13 +24,13 @@ export default function RegisterPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          workspaceName,
+          workspaceName: workspaceName.trim(),
           businessType,
-          serviceArea,
-          adminName,
-          email,
+          serviceArea: serviceArea.trim(),
+          adminName: adminName.trim(),
+          email: email.trim(),
           password,
-          phone,
+          phone: phone.trim() || undefined,
         }),
       });
 
@@ -43,10 +42,10 @@ export default function RegisterPage() {
         return;
       }
 
-      router.push('/');
-      router.refresh();
+      // Full navigation guarantees document session cookie is active on home page load
+      window.location.href = '/';
     } catch {
-      setError('Network error. Unable to provision workspace.');
+      setError('Network error. Unable to connect to authentication server.');
       setLoading(false);
     }
   };
@@ -194,9 +193,13 @@ export default function RegisterPage() {
             type="submit"
             className="btn btn-primary"
             disabled={loading}
-            style={{ width: '100%', marginTop: '8px' }}
+            style={{ width: '100%', marginTop: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
           >
-            {loading ? 'Provisioning...' : 'Complete Workspace Setup →'}
+            {loading ? 'Provisioning...' : (
+              <>
+                Complete Workspace Setup <ArrowRight size={14} />
+              </>
+            )}
           </button>
         </form>
 
