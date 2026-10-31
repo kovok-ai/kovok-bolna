@@ -299,7 +299,23 @@ export function ExceptionsView({ onReviewRecovery }: ExceptionsViewProps) {
                       }}
                     >
                       <td>
-                        <strong style={{ color: '#1e40af' }}>{e.exceptionCode}</strong>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <strong style={{ color: '#1e40af' }}>{e.exceptionCode}</strong>
+                          {e.exceptionCode === 'EX-2026-001' && (
+                            <span
+                              className="pill"
+                              style={{
+                                fontSize: '9px',
+                                padding: '1px 5px',
+                                background: '#f8fafc',
+                                color: '#64748b',
+                                border: '1px solid #cbd5e1',
+                              }}
+                            >
+                              Evaluation
+                            </span>
+                          )}
+                        </div>
                         <span className="sub">
                           {new Date(e.createdAt).toLocaleDateString('en-IN', {
                             day: 'numeric',

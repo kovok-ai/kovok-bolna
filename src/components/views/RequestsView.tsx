@@ -318,7 +318,23 @@ export function RequestsView({
                       }}
                     >
                       <td>
-                        <strong style={{ color: '#1e40af' }}>{r.requestCode}</strong>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <strong style={{ color: '#1e40af' }}>{r.requestCode}</strong>
+                          {r.requestCode.startsWith('KOV-REQ-000') && (
+                            <span
+                              className="pill"
+                              style={{
+                                fontSize: '9px',
+                                padding: '1px 5px',
+                                background: '#f8fafc',
+                                color: '#64748b',
+                                border: '1px solid #cbd5e1',
+                              }}
+                            >
+                              Evaluation
+                            </span>
+                          )}
+                        </div>
                         <span className="sub">
                           {new Date(r.createdAt).toLocaleDateString('en-IN', {
                             day: 'numeric',

@@ -250,7 +250,7 @@ export function QuotationsView({ onApproveQuote, onClarifyQuote }: QuotationsVie
                       onClick={() => setSelectedQuote(q)}
                     >
                       <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                           <strong>{q.supplier.organizationName}</strong>
                           {isLead && (
                             <span className="pill green" style={{ fontSize: '9px', padding: '1px 6px' }}>
@@ -260,6 +260,21 @@ export function QuotationsView({ onApproveQuote, onClarifyQuote }: QuotationsVie
                           {isApproved && (
                             <span className="pill green" style={{ fontSize: '9px', padding: '1px 6px' }}>
                               Approved PO
+                            </span>
+                          )}
+                          {q.reviewNotes?.includes('Illustrative evaluation record') && (
+                            <span
+                              className="pill"
+                              title="Illustrative evaluation record · Not supplier-confirmed"
+                              style={{
+                                fontSize: '9px',
+                                padding: '1px 6px',
+                                background: '#f8fafc',
+                                color: '#64748b',
+                                border: '1px solid #cbd5e1',
+                              }}
+                            >
+                              Illustrative &middot; Evaluation
                             </span>
                           )}
                         </div>

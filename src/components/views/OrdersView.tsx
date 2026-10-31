@@ -250,7 +250,24 @@ export function OrdersView({ onExport, onOpenOrder }: OrdersViewProps) {
                     }}
                   >
                     <td>
-                      <strong style={{ color: '#1e40af' }}>{o.poNumber}</strong>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <strong style={{ color: '#1e40af' }}>{o.poNumber}</strong>
+                        {o.poNumber === 'PO-0261' && (
+                          <span
+                            className="pill"
+                            title="Illustrative evaluation order · Not supplier-confirmed"
+                            style={{
+                              fontSize: '9px',
+                              padding: '1px 6px',
+                              background: '#f8fafc',
+                              color: '#64748b',
+                              border: '1px solid #cbd5e1',
+                            }}
+                          >
+                            Evaluation
+                          </span>
+                        )}
+                      </div>
                       <span className="sub">
                         {new Date(o.createdAt).toLocaleDateString('en-IN', {
                           day: 'numeric',
