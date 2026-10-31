@@ -4,6 +4,9 @@ from dotenv import load_dotenv
 
 
 def main():
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
     # Load environment variables from project-root .env file
     load_dotenv()
 

@@ -77,7 +77,18 @@ export function getSarvamVoiceConfigStatus(): SarvamVoiceConfigStatus {
   const configured: string[] = [];
 
   for (const key of requiredKeys) {
-    const val = process.env[key];
+    let val = process.env[key];
+    if ((!val || val.trim().length === 0)) {
+      if (key === 'APP_BASE_URL') {
+        val = process.env.APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined);
+      } else if (key === 'SARVAM_WORKSPACE_ID') {
+        val = process.env['Workspace ID'];
+      } else if (key === 'SARVAM_ORG_ID') {
+        val = process.env['Organization ID'];
+      } else if (key === 'SARVAM_CONNECTION_ID') {
+        val = process.env['Connection ID'];
+      }
+    }
     if (!val || val.trim().length === 0) {
       missing.push(key);
     } else {
@@ -220,17 +231,18 @@ export async function initiateSarvamOutboundCall(payload: OutboundCallPayload): 
     };
   }
 
-  const orgId = process.env.SARVAM_ORG_ID!;
-  const workspaceId = process.env.SARVAM_WORKSPACE_ID!;
+  const orgId = process.env.SARVAM_ORG_ID || process.env['Organization ID']!;
+  const workspaceId = process.env.SARVAM_WORKSPACE_ID || process.env['Workspace ID']!;
+  const connectionId = process.env.SARVAM_CONNECTION_ID || process.env['Connection ID'];
   const endpoint = `https://apps.sarvam.ai/api/outbounds/v1/orgs/${encodeURIComponent(orgId)}/workspaces/${encodeURIComponent(workspaceId)}/outbounds`;
 
-  const baseUrl = process.env.APP_BASE_URL?.replace(/\/$/, '') || 'http://localhost:3000';
+  const baseUrl = (process.env.APP_BASE_URL || process.env.APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')).replace(/\/$/, '');
   const callbackUrl = `${baseUrl}/api/integrations/sarvam/webhook?call_token=${token}&request_code=${encodeURIComponent(payload.requestCode)}`;
 
   const requestBody = {
     app_id: process.env.SARVAM_AGENT_APP_ID,
     app_version: process.env.SARVAM_AGENT_APP_VERSION,
-    connection_id: process.env.SARVAM_CONNECTION_ID,
+    connection_id: connectionId,
     agent_phone_number: process.env.SARVAM_AGENT_PHONE_NUMBER,
     user_phone_number: phoneClean.startsWith('+') ? phoneClean : phoneClean.length === 10 ? `+91${phoneClean}` : `+${phoneClean}`,
     callback_url: callbackUrl,
