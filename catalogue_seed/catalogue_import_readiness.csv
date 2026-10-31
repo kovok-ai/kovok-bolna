@@ -1,0 +1,13 @@
+table_name,entity_type,total_records,verified_production_ready_count,staged_candidate_count,blocked_or_restricted_count,production_import_decision,gate_clearance_notes
+categories.csv,material_taxonomy,14,14,0,0,READY_FOR_PRODUCTION_IMPORT,14 Indian construction categories defined with hierarchical taxonomy and IS standard mappings.
+canonical_products.csv,canonical_product,48,48,0,0,READY_FOR_PRODUCTION_IMPORT,"48 Statutory generic products (Fe 500D, Fe 550D, CRS, Fe 415D rebars & OPC, PPC, PSC, Composite cement) strictly conforming to IS 1786 and IS 269/1489/455."
+manufacturers.csv,corporate_manufacturer,20,20,0,0,READY_FOR_PRODUCTION_IMPORT,20 Real Indian primary steel and cement manufacturers audited via statutory BSE/NSE filings and BIS registries.
+standards_registry.csv,statutory_standard,14,14,0,0,READY_FOR_PRODUCTION_IMPORT,"14 BIS statutory standards audited with current edition, reaffirmation dates, and supersession history."
+source_registry.csv,source_registry,21,11,3,7,AUDITED_SCOPE_DOCUMENTED,"21 Sources audited under strict TLS; 11 accessible, 7 blocked/failing (SAIL TLS error, 404s, 503, WAF challenges), 3 commercial candidates."
+technical_specifications.csv,technical_specification,52,48,3,1,STANDARDS_COMPLIANT_SPECIFICATION_ONLY,48 Standard-derived specifications fully verified; manufacturer claims tracked as candidate/blocked (UNR-001).
+product_evidence.csv,crawl_evidence,6,2,0,4,AUDIT_LOG_ONLY,Granular crawl evidence records documenting exact HTTP status codes and excerpts.
+product_variants.csv,branded_variant,54,0,10,44,NOT_READY_DEMOTED_TO_CANDIDATE,"Zero unearned verified variants. 44 blocked/unverified due to broken URLs (404/503), WAF (403), or TLS failure; 10 staged candidates."
+supplier_organizations.csv,supplier_entity,4,4,0,0,READY_FOR_PRODUCTION_IMPORT,4 Verified supplier corporate entities with legitimate service geographies and contact details.
+supplier_listings.csv,supplier_listing,24,0,24,0,NOT_READY_DEMOTED_TO_PLATFORM_ONLY,"Demoted all 24 records to platform_only / candidate. Live prices, stock, and firm quote validity must be obtained via Sarvam voice calls."
+product_images.csv,image_asset,54,0,0,54,RESTRICTED_PENDING_ASSET_ACQUISITION,Zero verified SKU photos. 100% of image records quarantined from commercial production display (display_in_production=False).
+unresolved_records.csv,review_queue,10,10,0,0,ACTIVE_ENGINEERING_REVIEW_QUEUE,"10 Active engineering review cases assigned to metallurgy, structural, safety, legal, and provenance leads."

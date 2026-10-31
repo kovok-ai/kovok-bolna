@@ -1,6 +1,14 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { calculateRebarConversions, RebarCalculations } from '@/lib/procurement/intake';
+
+interface SiteOption {
+  id: string;
+  siteName: string;
+  pinCode: string;
+  city: string;
+}
 
 interface NewRequestModalProps {
   isOpen: boolean;
@@ -10,22 +18,51 @@ interface NewRequestModalProps {
 
 export function NewRequestModal({ isOpen, onClose, onSubmit }: NewRequestModalProps) {
   const [step, setStep] = useState(0);
-  const [category, setCategory] = useState<'tmt' | 'cement' | 'other'>('tmt');
+  const [category, setCategory] = useState<'tmt_rebar' | 'cement'>('tmt_rebar');
   const [description, setDescription] = useState('20 tonnes of TMT steel for Gurugram site');
-  const [grade, setGrade] = useState('Fe 550D');
+  const [grade, setGrade] = useState('Fe 500D');
   const [diameter, setDiameter] = useState('12');
-  const [brandRule, setBrandRule] = useState('Open to approved brands');
   const [cementType, setCementType] = useState('OPC 53');
   const [cementPack, setCementPack] = useState('50 kg bag');
   const [quantity, setQuantity] = useState('20');
-  const [unit, setUnit] = useState('tonnes');
-  const [site, setSite] = useState('Site A — Gurugram');
-  const [pin, setPin] = useState('122018');
-  const [date, setDate] = useState('2026-11-02');
+  const [unit, setUnit] = useState<'TONNES' | 'BAGS' | 'PIECES'>('TONNES');
+  const [sites, setSites] = useState<SiteOption[]>([]);
+  const [selectedSiteId, setSelectedSiteId] = useState<string>('');
+  const [buyerNotes, setBuyerNotes] = useState('');
   const [deliveryBasis, setDeliveryBasis] = useState('Delivered at site');
-  const [vendorCount, setVendorCount] = useState('3');
-  const [budget, setBudget] = useState('₹10,50,000');
   const [confirmed, setConfirmed] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionResult, setSubmissionResult] = useState<any>(null);
+  const [conversion, setConversion] = useState<RebarCalculations | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      // Fetch workspace sites
+      fetch('/api/workspaces')
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.sites && data.sites.length > 0) {
+            setSites(data.sites);
+            setSelectedSiteId(data.sites[0].id);
+          }
+        })
+        .catch((err) => console.error('Failed to load workspace sites:', err));
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (category === 'tmt_rebar' && diameter) {
+      const d = parseFloat(diameter);
+      const q = parseFloat(quantity) || 0;
+      if (!isNaN(d) && d > 0) {
+        setConversion(calculateRebarConversions(d, q, unit));
+      } else {
+        setConversion(null);
+      }
+    } else {
+      setConversion(null);
+    }
+  }, [category, diameter, quantity, unit]);
 
   if (!isOpen) return null;
 
@@ -37,7 +74,7 @@ export function NewRequestModal({ isOpen, onClose, onSubmit }: NewRequestModalPr
     'Check all details before supplier outreach starts.',
   ];
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (step < 3) {
       setStep(step + 1);
     } else {
@@ -45,22 +82,52 @@ export function NewRequestModal({ isOpen, onClose, onSubmit }: NewRequestModalPr
         alert('Please confirm the requirement before submitting.');
         return;
       }
-      onSubmit({
-        category,
-        description,
-        grade,
-        diameter,
-        quantity,
-        unit,
-        site,
-        pin,
-        date,
-        deliveryBasis,
-        vendorCount,
-      });
-      onClose();
+      if (!selectedSiteId) {
+        alert('Please select an active project site.');
+        return;
+      }
+
+      setIsSubmitting(true);
+      try {
+        const payload = {
+          siteId: selectedSiteId,
+          materialCategoryId: category,
+          targetGrade: category === 'tmt_rebar' ? grade : cementType,
+          targetDiameterMm: category === 'tmt_rebar' ? parseFloat(diameter) : undefined,
+          quantityValue: parseFloat(quantity) || 1,
+          quantityUnit: unit,
+          buyerNotes: buyerNotes ? buyerNotes : description,
+        };
+
+        const res = await fetch('/api/procurement/requests', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          alert(`Submission error: ${data.error || 'Failed to submit'}`);
+          setIsSubmitting(false);
+          return;
+        }
+
+        setSubmissionResult(data);
+        onSubmit({
+          ...payload,
+          requestCode: data.request.requestCode,
+          status: data.request.requestStatus,
+          clarificationReason: data.request.clarificationReason,
+        });
+      } catch (err: any) {
+        alert(`Error submitting request: ${err.message}`);
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
+
+  const selectedSite = sites.find((s) => s.id === selectedSiteId);
 
   return (
     <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -122,9 +189,9 @@ export function NewRequestModal({ isOpen, onClose, onSubmit }: NewRequestModalPr
                   ♫
                 </div>
                 <div>
-                  <strong style={{ fontSize: '12px' }}>Describe it naturally</strong>
+                  <strong style={{ fontSize: '12px' }}>Natural Procurement Intake</strong>
                   <p style={{ fontSize: '11px', color: '#64748b', margin: '4px 0 0' }}>
-                    Type the request or use speech. In production, Sarvam handles voice; Kovok resolves the product and business rules.
+                    Type the request. Kovok verifies Indian statutory specifications (IS 1786 / IS 269) and preserves buyer intent without silent substitution. Voice telephony integration is planned with Sarvam AI.
                   </p>
                 </div>
               </div>
@@ -134,7 +201,7 @@ export function NewRequestModal({ isOpen, onClose, onSubmit }: NewRequestModalPr
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="e.g. 20 tonnes of TMT steel for Gurugram site by Monday..."
+                  placeholder="e.g. 20 tonnes of TMT steel Fe 500D 12mm for Gurugram site..."
                 />
               </div>
 
@@ -146,20 +213,18 @@ export function NewRequestModal({ isOpen, onClose, onSubmit }: NewRequestModalPr
                     onChange={(e) => {
                       const c = e.target.value as any;
                       setCategory(c);
-                      setUnit(c === 'cement' ? 'bags' : 'tonnes');
+                      setUnit(c === 'cement' ? 'BAGS' : 'TONNES');
                     }}
                   >
-                    <option value="tmt">TMT / reinforcement steel</option>
-                    <option value="cement">Cement</option>
-                    <option value="other">Other construction material</option>
+                    <option value="tmt_rebar">TMT Steel (IS 1786:2008)</option>
+                    <option value="cement">Cement (IS 269 / IS 1489 / IS 455)</option>
                   </select>
                 </div>
                 <div className="field">
                   <label>Request source</label>
                   <select>
-                    <option>New standalone request</option>
-                    <option>Existing system / purchase request</option>
-                    <option>Repeat previous purchase</option>
+                    <option>Standard Buyer Intake (Phase 2)</option>
+                    <option>Repeat Purchase Order</option>
                   </select>
                 </div>
               </div>
@@ -170,66 +235,103 @@ export function NewRequestModal({ isOpen, onClose, onSubmit }: NewRequestModalPr
           {step === 1 && (
             <div>
               <div className="alert" style={{ marginBottom: '14px' }}>
-                Only required attributes for the selected material should be mandatory. An image can help identify a product, but cannot prove structural compliance.
+                Only statutory required attributes are mandatory. Verified products match BIS standards; non-preferred or unlisted sizes route to engineering clarification.
               </div>
 
-              {category === 'tmt' ? (
-                <div className="form-grid three" style={{ marginBottom: '14px' }}>
-                  <div className="field">
-                    <label>Grade / designation *</label>
-                    <select value={grade} onChange={(e) => setGrade(e.target.value)}>
-                      <option>Fe 500D</option>
-                      <option>Fe 550D</option>
-                      <option>Fe 500</option>
-                      <option>Fe 415D</option>
-                      <option>Fe 600</option>
-                    </select>
+              {category === 'tmt_rebar' ? (
+                <div>
+                  <div className="form-grid three" style={{ marginBottom: '14px' }}>
+                    <div className="field">
+                      <label>Grade / Designation *</label>
+                      <select value={grade} onChange={(e) => setGrade(e.target.value)}>
+                        <option value="Fe 500D">Fe 500D (Core Standard)</option>
+                        <option value="Fe 550D">Fe 550D (High Strength Ductile)</option>
+                        <option value="Fe 500D CRS">Fe 500D CRS (Corrosion Resistant - Provisional)</option>
+                        <option value="Fe 415D">Fe 415D (Legacy Ductile - Provisional)</option>
+                      </select>
+                    </div>
+                    <div className="field">
+                      <label>Diameter (mm) *</label>
+                      <select value={diameter} onChange={(e) => setDiameter(e.target.value)}>
+                        <option value="8">8 mm (Core)</option>
+                        <option value="10">10 mm (Core)</option>
+                        <option value="12">12 mm (Core)</option>
+                        <option value="14">14 mm (Unlisted Clause 6.1.1)</option>
+                        <option value="16">16 mm (Core)</option>
+                        <option value="20">20 mm (Core)</option>
+                        <option value="25">25 mm (Core)</option>
+                        <option value="28">28 mm (Provisional rolling)</option>
+                        <option value="32">32 mm (Core)</option>
+                        <option value="36">36 mm (Provisional civil)</option>
+                        <option value="40">40 mm (Provisional civil)</option>
+                      </select>
+                    </div>
+                    <div className="field">
+                      <label>Unit *</label>
+                      <select value={unit} onChange={(e) => setUnit(e.target.value as any)}>
+                        <option value="TONNES">Tonnes (Metric)</option>
+                        <option value="PIECES">Pieces (12m bars)</option>
+                      </select>
+                    </div>
                   </div>
-                  <div className="field">
-                    <label>Diameter (mm) *</label>
-                    <select value={diameter} onChange={(e) => setDiameter(e.target.value)}>
-                      <option>8</option>
-                      <option>10</option>
-                      <option>12</option>
-                      <option>16</option>
-                      <option>20</option>
-                      <option>25</option>
-                      <option>32</option>
-                    </select>
-                  </div>
-                  <div className="field">
-                    <label>Brand / mill rule</label>
-                    <select value={brandRule} onChange={(e) => setBrandRule(e.target.value)}>
-                      <option>Open to approved brands</option>
-                      <option>Specific approved brand only</option>
-                      <option>Buyer must approve alternatives</option>
-                    </select>
-                  </div>
+
+                  {conversion && (
+                    <div
+                      style={{
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                        padding: '12px',
+                        marginBottom: '14px',
+                        fontSize: '11px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                        <span>Nominal mass: <strong>{conversion.nominalMassKgPerMeter} kg/m</strong></span>
+                        <span>Single 12m bar mass: <strong>{conversion.singleBarMassKg} kg</strong></span>
+                        <span>Bars per tonne: <strong>{conversion.theoreticalBarsPerTonne} bars</strong></span>
+                      </div>
+                      {conversion.totalPiecesEstimated && (
+                        <div style={{ color: '#1e40af', fontWeight: 600, marginTop: '4px' }}>
+                          Theoretical count: ~{conversion.totalPiecesEstimated} bars for {quantity} tonnes
+                        </div>
+                      )}
+                      <div style={{ color: '#64748b', fontSize: '10px', marginTop: '6px', lineHeight: '1.4' }}>
+                        Citation: {conversion.standardClauseCitation}
+                        <br />
+                        Note: {conversion.commercialBillingCaveat}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
-                <div className="form-grid three" style={{ marginBottom: '14px' }}>
-                  <div className="field">
-                    <label>Cement type *</label>
-                    <select value={cementType} onChange={(e) => setCementType(e.target.value)}>
-                      <option>OPC 53</option>
-                      <option>OPC 43</option>
-                      <option>PPC (Flyash)</option>
-                      <option>PSC (Slag)</option>
-                    </select>
-                  </div>
-                  <div className="field">
-                    <label>Pack size *</label>
-                    <select value={cementPack} onChange={(e) => setCementPack(e.target.value)}>
-                      <option>50 kg bag</option>
-                      <option>Bulk tanker</option>
-                    </select>
-                  </div>
-                  <div className="field">
-                    <label>Brand rule</label>
-                    <select>
-                      <option>Open to approved brands</option>
-                      <option>Specific approved brand only</option>
-                    </select>
+                <div>
+                  <div className="form-grid three" style={{ marginBottom: '14px' }}>
+                    <div className="field">
+                      <label>Cement Type / Grade *</label>
+                      <select value={cementType} onChange={(e) => setCementType(e.target.value)}>
+                        <option value="OPC 53">OPC 53 (IS 269:2015)</option>
+                        <option value="PPC Fly Ash">PPC Fly Ash (IS 1489 Pt 1)</option>
+                        <option value="PSC Slag">PSC Slag (IS 455:2015)</option>
+                        <option value="Composite">Composite Cement (IS 16415)</option>
+                        <option value="OPC 43">OPC 43 (Provisional)</option>
+                        <option value="OPC 33">OPC 33 (Provisional)</option>
+                      </select>
+                    </div>
+                    <div className="field">
+                      <label>Pack size *</label>
+                      <select value={cementPack} onChange={(e) => setCementPack(e.target.value)}>
+                        <option value="50 kg bag">50 kg HDPE / Paper bag</option>
+                        <option value="Bulk tanker">Bulk Tanker / Silo</option>
+                      </select>
+                    </div>
+                    <div className="field">
+                      <label>Unit *</label>
+                      <select value={unit} onChange={(e) => setUnit(e.target.value as any)}>
+                        <option value="BAGS">Bags (50 kg)</option>
+                        <option value="TONNES">Tonnes</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
               )}
@@ -245,12 +347,12 @@ export function NewRequestModal({ isOpen, onClose, onSubmit }: NewRequestModalPr
                   />
                 </div>
                 <div className="field">
-                  <label>Unit *</label>
-                  <select value={unit} onChange={(e) => setUnit(e.target.value)}>
-                    <option>tonnes</option>
-                    <option>bags</option>
-                    <option>kg</option>
-                  </select>
+                  <label>Buyer Specifications / Notes</label>
+                  <input
+                    value={buyerNotes}
+                    onChange={(e) => setBuyerNotes(e.target.value)}
+                    placeholder="e.g. Tower 3 foundation raft, test certificates required..."
+                  />
                 </div>
               </div>
             </div>
@@ -261,24 +363,17 @@ export function NewRequestModal({ isOpen, onClose, onSubmit }: NewRequestModalPr
             <div>
               <div className="form-grid" style={{ marginBottom: '14px' }}>
                 <div className="field">
-                  <label>Delivery site / project *</label>
-                  <input value={site} onChange={(e) => setSite(e.target.value)} />
-                </div>
-                <div className="field">
-                  <label>PIN code *</label>
-                  <input
-                    value={pin}
-                    maxLength={6}
-                    onChange={(e) => setPin(e.target.value)}
-                  />
-                </div>
-                <div className="field">
-                  <label>Required by date *</label>
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                  />
+                  <label>Delivery Project Site *</label>
+                  <select
+                    value={selectedSiteId}
+                    onChange={(e) => setSelectedSiteId(e.target.value)}
+                  >
+                    {sites.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.siteName} ({s.city} - {s.pinCode})
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="field">
                   <label>Delivery basis</label>
@@ -293,83 +388,137 @@ export function NewRequestModal({ isOpen, onClose, onSubmit }: NewRequestModalPr
                 </div>
               </div>
 
-              <div className="field" style={{ marginBottom: '14px' }}>
-                <label>Budget or ceiling cost (optional)</label>
-                <input
-                  value={budget}
-                  onChange={(e) => setBudget(e.target.value)}
-                  placeholder="e.g. ₹10,50,000"
-                />
-              </div>
+              {selectedSite && (
+                <div className="panel" style={{ padding: '12px', fontSize: '11px', color: '#475569' }}>
+                  <strong>Selected Site Details:</strong> {selectedSite.siteName} · PIN {selectedSite.pinCode} · City: {selectedSite.city}
+                </div>
+              )}
             </div>
           )}
 
           {/* Step 3: Review & Send */}
           {step === 3 && (
             <div>
-              <div className="alert" style={{ marginBottom: '14px' }}>
-                Review before any supplier outreach starts. The system will use these exact terms to request comparable offers. No order is placed at this stage.
-              </div>
+              {submissionResult ? (
+                <div style={{ textAlign: 'center', padding: '24px 12px' }}>
+                  <div
+                    style={{
+                      width: '48px',
+                      height: '48px',
+                      borderRadius: '50%',
+                      background: submissionResult.match.requestStatus === 'MATCHED_VERIFIED' ? '#dcfce7' : '#fef3c7',
+                      color: submissionResult.match.requestStatus === 'MATCHED_VERIFIED' ? '#15803d' : '#b45366',
+                      display: 'grid',
+                      placeItems: 'center',
+                      fontSize: '22px',
+                      margin: '0 auto 12px',
+                    }}
+                  >
+                    {submissionResult.match.requestStatus === 'MATCHED_VERIFIED' ? '✓' : '!'}
+                  </div>
+                  <h3>Request {submissionResult.request.requestCode} Created</h3>
+                  <p style={{ fontSize: '12px', color: '#475569', maxWidth: '420px', margin: '6px auto 16px' }}>
+                    Status: <strong>{submissionResult.match.requestStatus}</strong>
+                    {submissionResult.match.canonicalProductId && (
+                      <span> · Matched to {submissionResult.match.canonicalProductId}</span>
+                    )}
+                  </p>
+                  {submissionResult.match.clarificationReason && (
+                    <div className="alert" style={{ textAlign: 'left', marginBottom: '16px' }}>
+                      <strong>Clarification Reason:</strong>
+                      <br />
+                      {submissionResult.match.clarificationReason}
+                    </div>
+                  )}
+                  <button className="btn btn-primary" onClick={onClose}>
+                    Done
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <div className="alert" style={{ marginBottom: '14px' }}>
+                    Review before submission. Kovok checks statutory standards and creates an isolated procurement intake record.
+                  </div>
 
-              <div className="panel" style={{ padding: '16px', marginBottom: '16px' }}>
-                <div className="kv">
-                  <span>Material & Grade</span>
-                  <strong>
-                    {category === 'tmt' ? `TMT Steel ${grade} · ${diameter} mm` : `Cement ${cementType} · ${cementPack}`}
-                  </strong>
-                </div>
-                <div className="kv">
-                  <span>Quantity</span>
-                  <strong>
-                    {quantity} {unit}
-                  </strong>
-                </div>
-                <div className="kv">
-                  <span>Delivery destination</span>
-                  <strong>
-                    {site} · {pin}
-                  </strong>
-                </div>
-                <div className="kv">
-                  <span>Required by</span>
-                  <strong>{date}</strong>
-                </div>
-                <div className="kv">
-                  <span>Delivery basis</span>
-                  <strong>{deliveryBasis}</strong>
-                </div>
-              </div>
+                  <div className="panel" style={{ padding: '16px', marginBottom: '16px' }}>
+                    <div className="kv">
+                      <span>Material & Specification</span>
+                      <strong>
+                        {category === 'tmt_rebar'
+                          ? `TMT Steel ${grade} · ${diameter} mm`
+                          : `Cement ${cementType} · ${cementPack}`}
+                      </strong>
+                    </div>
+                    <div className="kv">
+                      <span>Quantity</span>
+                      <strong>
+                        {quantity} {unit}
+                      </strong>
+                    </div>
+                    <div className="kv">
+                      <span>Destination Site</span>
+                      <strong>
+                        {selectedSite ? `${selectedSite.siteName} (${selectedSite.pinCode})` : 'Unselected'}
+                      </strong>
+                    </div>
+                    <div className="kv">
+                      <span>Delivery Basis</span>
+                      <strong>{deliveryBasis}</strong>
+                    </div>
+                    {conversion && (
+                      <div className="kv">
+                        <span>Theoretical Conversion</span>
+                        <span>{conversion.theoreticalBarsPerTonne} bars/tonne (~{conversion.totalPiecesEstimated} pieces)</span>
+                      </div>
+                    )}
+                  </div>
 
-              <label className="checkline">
-                <input
-                  type="checkbox"
-                  checked={confirmed}
-                  onChange={(e) => setConfirmed(e.target.checked)}
-                />
-                <span>
-                  I confirm the requirement is accurate and authorize Kovok to contact eligible suppliers for quotations. This does not authorize an order.
-                </span>
-              </label>
+                  <label className="checkline">
+                    <input
+                      type="checkbox"
+                      checked={confirmed}
+                      onChange={(e) => setConfirmed(e.target.checked)}
+                    />
+                    <span>
+                      I confirm this procurement specification. I understand Kovok will match to verified canonical specifications or flag for technical clarification without silent substitution.
+                    </span>
+                  </label>
+                </div>
+              )}
             </div>
           )}
         </div>
 
         {/* Modal Footer */}
-        <div className="wizard-footer">
-          <span style={{ fontSize: '10.5px', color: 'var(--muted)' }}>
-            Step {step + 1} of 4 · Buyer authorization strictly required before order placement.
-          </span>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            {step > 0 && (
-              <button className="btn btn-secondary" onClick={() => setStep(step - 1)}>
-                Back
+        {!submissionResult && (
+          <div className="wizard-footer">
+            <span style={{ fontSize: '10.5px', color: 'var(--muted)' }}>
+              Step {step + 1} of 4 · Tenant-isolated procurement intake.
+            </span>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {step > 0 && (
+                <button
+                  className="btn btn-secondary"
+                  disabled={isSubmitting}
+                  onClick={() => setStep(step - 1)}
+                >
+                  Back
+                </button>
+              )}
+              <button
+                className="btn btn-primary"
+                disabled={isSubmitting}
+                onClick={handleNext}
+              >
+                {isSubmitting
+                  ? 'Submitting...'
+                  : step === 3
+                  ? 'Submit Procurement Request'
+                  : 'Continue →'}
               </button>
-            )}
-            <button className="btn btn-primary" onClick={handleNext}>
-              {step === 3 ? 'Create request & start sourcing' : 'Continue →'}
-            </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

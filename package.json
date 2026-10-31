@@ -11,7 +11,12 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
-    "test": "tsx tests/run-all.ts"
+    "catalogue:manifest": "tsx scripts/generate_manifest.ts",
+    "catalogue:dry-run": "tsx scripts/import_catalogue.ts --dry-run",
+    "catalogue:import": "tsx scripts/import_catalogue.ts",
+    "catalogue:rollback": "tsx scripts/rollback_catalogue.ts",
+    "test": "tsx tests/run-all.ts",
+    "test:real-postgres": "tsx --env-file=.env tests/real-postgres-integration.ts"
   },
   "dependencies": {
     "next": "16.2.12",

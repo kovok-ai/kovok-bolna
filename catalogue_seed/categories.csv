@@ -1,0 +1,15 @@
+category_id,category_name,parent_category_id,taxonomy_version,is_active,research_status,description
+tmt_rebar,TMT & Reinforcement Steel,,2.0.0,True,fully_researched_p0,"Thermo-Mechanically Treated reinforcement steel bars, stirrups, and corrosion resistant steel under IS 1786:2008."
+cement,Cement & Mineral Binders,,2.0.0,True,fully_researched_p0,"Ordinary Portland Cement (33, 43, 53), PPC Fly-ash based, Portland Slag Cement, and Composite Cements."
+structural_steel,Structural Steel & Hot Rolled Sections,,2.0.0,True,inventoried_for_future_work,"ISMB Joists, ISMC Channels, Angles, and Structural Plates conforming to IS 2062:2011."
+ms_gi_pipes,MS & GI Steel Pipes,,2.0.0,True,inventoried_for_future_work,Mild Steel and Galvanized Iron tubes and structural hollow sections conforming to IS 1239:2004 and IS 1161:2014.
+plumbing_pipes,"PVC, CPVC & UPVC Plumbing Systems",,2.0.0,True,inventoried_for_future_work,"Potable hot and cold water distribution pipes, SDR 11/13.5 CPVC (IS 15778) and UPVC (IS 4985)."
+rmc,Ready-Mix Concrete (RMC),,2.0.0,True,inventoried_for_future_work,Standard and design mix concrete (M15 to M50) supplied by transit mixers under IS 4926:2003.
+construction_chemicals,Construction Chemicals & Waterproofing,,2.0.0,True,inventoried_for_future_work,"Integral waterproofing admixtures (IS 2645), concrete superplasticizers (IS 9103), and polymeric repair mortars."
+aac_blocks,AAC Blocks & Precast Masonry,,2.0.0,True,inventoried_for_future_work,Autoclaved Aerated Cellular Concrete blocks conforming to IS 2185 (Part 3):1984.
+bricks_blocks,Bricks & Concrete Masonry Blocks,,2.0.0,True,inventoried_for_future_work,"Burnt clay bricks (IS 1077), fly ash lime bricks (IS 12894), and solid/hollow concrete blocks (IS 2185 Part 1)."
+sand_aggregates,Sand & Coarse Aggregates,,2.0.0,True,inventoried_for_future_work,"Graded granite coarse aggregates (10mm, 20mm, 40mm) and Manufactured Sand (M-Sand Zone II) under IS 383:2016."
+tiles_flooring,Tiles & Architectural Flooring,,2.0.0,True,inventoried_for_future_work,Double charged and glazed vitrified tiles (GVT/PGVT) and ceramic tiles conforming to IS 15622:2017.
+roofing_materials,Roofing Sheets & Cladding Systems,,2.0.0,True,inventoried_for_future_work,Color-coated Galvalume (PPGL) and Galvanized (PPGI) corrugated roofing sheets under IS 15965:2012.
+fasteners_hardware,Structural Fasteners & Hardware,,2.0.0,True,inventoried_for_future_work,"High-strength structural bolts, nuts, and washers (Grade 8.8, 10.9) under IS 1367 and IS 3757."
+electrical,Electrical Construction Materials,,2.0.0,True,inventoried_for_future_work,"FRLS copper building wires (IS 694:2010), heavy-duty PVC conduits (IS 9537), and modular distribution boards."

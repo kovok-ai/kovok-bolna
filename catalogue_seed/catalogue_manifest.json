@@ -1,0 +1,171 @@
+{
+  "version": "2.0.0",
+  "generatedAt": "2026-10-30T10:20:14.457Z",
+  "sourcePackage": "Kovok_Final_Construction_Catalogue_Package.zip",
+  "sourceRepoCommit": "822c05a95be1c3cbf709da0ded75f32fe53b48bc",
+  "files": {
+    "categories.csv": {
+      "filename": "categories.csv",
+      "sha256": "53affb3c255810b88af0274f6eb129151a612676e742a41292b3627715569263",
+      "bytes": 2721,
+      "rowCount": 14,
+      "primaryKey": "category_id",
+      "provenance": "Kovok_Catalogue_UI_Spec_Package/data/categories.csv",
+      "statusSummary": {
+        "fully_researched_p0": 2,
+        "inventoried_for_future_work": 12
+      }
+    },
+    "standards_registry.csv": {
+      "filename": "standards_registry.csv",
+      "sha256": "5549dcac08d186a88195e30cec71ea4de62caed55178eefa91c4e3d372b94347",
+      "bytes": 5884,
+      "rowCount": 14,
+      "primaryKey": "standard_id",
+      "provenance": "Kovok_Catalogue_UI_Spec_Package/data/standards_registry.csv",
+      "statusSummary": {
+        "Statutory Mandatory (Steel Quality Control Order)": 1,
+        "Statutory Mandatory (Cement Quality Control Order)": 5,
+        "National Building Code Referenced Code": 1,
+        "Statutory Seismic Mandate": 1,
+        "Statutory Steel QCO": 2,
+        "Statutory BIS Standard": 1,
+        "Statutory RMC Standard": 1,
+        "Standard Civil Specification": 1,
+        "Statutory Concrete Code Standard": 1
+      }
+    },
+    "canonical_products.csv": {
+      "filename": "canonical_products.csv",
+      "sha256": "cc7c3bb15c66307fe2b02f7ce3101a5ccb72f1fbbb8e92452187c4159b5efa0f",
+      "bytes": 41571,
+      "rowCount": 43,
+      "primaryKey": "canonical_product_id",
+      "provenance": "Kovok_Catalogue_UI_Spec_Package/data/canonical_products.csv",
+      "statusSummary": {
+        "verified": 43
+      }
+    },
+    "manufacturers.csv": {
+      "filename": "manufacturers.csv",
+      "sha256": "9edd2a57a7cf9db58334da41be14309bfd4350117f6265749c0b916e92202211",
+      "bytes": 9176,
+      "rowCount": 20,
+      "primaryKey": "manufacturer_id",
+      "provenance": "Kovok_Catalogue_UI_Spec_Package/data/manufacturers.csv",
+      "statusSummary": {
+        "verified": 20
+      }
+    },
+    "technical_specifications.csv": {
+      "filename": "technical_specifications.csv",
+      "sha256": "7f4c0e4996d0610bff272b567ce10fec8457ad1dba5680eb22c344bb902ad65a",
+      "bytes": 12275,
+      "rowCount": 52,
+      "primaryKey": "spec_id",
+      "provenance": "Kovok_Catalogue_UI_Spec_Package/data/technical_specifications.csv",
+      "statusSummary": {
+        "verified": 48,
+        "blocked": 1,
+        "candidate": 3
+      }
+    },
+    "source_registry.csv": {
+      "filename": "source_registry.csv",
+      "sha256": "cfbd210b90f353ea813f0a3c0f84222c820e3f0b5143ba941c19be1743c003f1",
+      "bytes": 7134,
+      "rowCount": 21,
+      "primaryKey": "source_id",
+      "provenance": "Kovok_Catalogue_UI_Spec_Package/data/source_registry.csv",
+      "statusSummary": {
+        "valid_strict_tls": 18,
+        "blocked_ssl_error": 1,
+        "connection_terminated": 2
+      }
+    },
+    "supplier_organizations.csv": {
+      "filename": "supplier_organizations.csv",
+      "sha256": "ab3e455f891f90fae078ba0986dd1a66d6db22031ab8a693916fe17472ee31ac",
+      "bytes": 2390,
+      "rowCount": 4,
+      "primaryKey": "supplier_id",
+      "provenance": "Kovok_Catalogue_UI_Spec_Package/data/supplier_organizations.csv",
+      "statusSummary": {
+        "verified_organization": 4
+      }
+    },
+    "supplier_listings.csv": {
+      "filename": "supplier_listings.csv",
+      "sha256": "e70c3103c49b3d1fdae69944366c622169a395248da80ff82bb06c6f7b5b7924",
+      "bytes": 12483,
+      "rowCount": 24,
+      "primaryKey": "listing_id",
+      "provenance": "Kovok_Catalogue_UI_Spec_Package/data/supplier_listings.csv",
+      "statusSummary": {
+        "platform_only_broken_url": 12,
+        "platform_only": 12
+      }
+    },
+    "product_variants.csv": {
+      "filename": "product_variants.csv",
+      "sha256": "cb2e2bcf62898d244695ee7fd7ab356cce7c5d0162c9d8c17437ef8c628f52a1",
+      "bytes": 27908,
+      "rowCount": 54,
+      "primaryKey": "variant_id",
+      "provenance": "Kovok_Catalogue_UI_Spec_Package/data/product_variants.csv",
+      "statusSummary": {
+        "blocked": 20,
+        "unverified": 19,
+        "candidate": 13,
+        "candidate_partially_verified": 2
+      }
+    },
+    "product_images.csv": {
+      "filename": "product_images.csv",
+      "sha256": "3078a3decc19e914e8b512b3714bd0daf4427878e2b90ae9a6830e39cae1836d",
+      "bytes": 24705,
+      "rowCount": 54,
+      "primaryKey": "image_id",
+      "provenance": "Kovok_Catalogue_UI_Spec_Package/data/product_images.csv",
+      "statusSummary": {
+        "internal_technical_reference_only": 37,
+        "restricted_concept_mockup": 10,
+        "blocked": 7
+      }
+    },
+    "product_evidence.csv": {
+      "filename": "product_evidence.csv",
+      "sha256": "14971bd3bc376c0a03fe41112a47c040cdb0475b3caa4459c704ef3a50018485",
+      "bytes": 2740,
+      "rowCount": 6,
+      "primaryKey": "evidence_id",
+      "provenance": "Kovok_Catalogue_UI_Spec_Package/data/product_evidence.csv",
+      "statusSummary": {
+        "blocked_broken_url": 1,
+        "unverified_broken_url": 1,
+        "blocked_insecure_tls": 1,
+        "unverified_server_error": 1,
+        "candidate_partially_verified": 2
+      }
+    },
+    "unresolved_records.csv": {
+      "filename": "unresolved_records.csv",
+      "sha256": "9e6b8b90ed62610f50f0fe9c31e6d2157dd0e28b9648583b7e4ba2b2daf9e0ff",
+      "bytes": 6522,
+      "rowCount": 10,
+      "primaryKey": "unresolved_id",
+      "provenance": "Kovok_Catalogue_UI_Spec_Package/data/unresolved_records.csv",
+      "statusSummary": {
+        "pending_lab_verification": 1,
+        "awaiting_buyer_clarification": 2,
+        "awaiting_supplier_clarification": 1,
+        "pending_review": 1,
+        "rejected_for_safety": 1,
+        "blocked_pending_license": 1,
+        "blocked_tls_failure": 1,
+        "pending_url_remediation": 1,
+        "quarantined_from_production": 1
+      }
+    }
+  }
+}

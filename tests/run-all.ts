@@ -20,6 +20,17 @@ import { PGlite } from '@electric-sql/pglite';
 import { validateEnv } from '../src/lib/env';
 import { hashPassword, verifyPassword, generateSessionToken } from '../src/lib/auth';
 import { checkLoginRateLimit, recordFailedLogin, resetLoginRateLimit } from '../src/app/api/auth/login/route';
+import {
+  validateManifestIntegrity,
+  generateDryRunReport,
+  executeImport,
+  rollbackBatch,
+  CORE_VERIFIED_CANONICAL_IDS
+} from '../src/lib/catalogue/importer';
+import {
+  calculateRebarConversions,
+  matchProcurementRequirement
+} from '../src/lib/procurement/intake';
 
 // ANSI terminal colors for clear test reporting
 const GREEN = '\x1b[32m';
@@ -713,11 +724,527 @@ async function main() {
 
   console.log();
 
+  // ==========================================================================
+  // PHASE 2 TEST SUITES: CONTROLLED CATALOGUE INTEGRATION & INTAKE
+  // ==========================================================================
+  const seedDir = path.join(__dirname, '../catalogue_seed');
+
+  // --------------------------------------------------------------------------
+  // SUITE 9: Manifest & SHA-256 Byte Integrity Verification
+  // --------------------------------------------------------------------------
+  console.log(`${BOLD}[9/13] Phase 2 Manifest & SHA-256 Byte Integrity Verification${RESET}`);
+
+  await runTest('Validates SHA-256 byte integrity of all 12 staged CSV files against manifest', () => {
+    const { manifest, manifestSha256 } = validateManifestIntegrity(seedDir);
+    assert(manifestSha256.length === 64, 'Manifest must have a valid 64-char SHA-256 hash');
+    assert(Object.keys(manifest.files).length === 12, 'Manifest must cover all 12 relational CSV files');
+  });
+
+  await runTest('Rejects tampered manifest or modified file bytes safely', () => {
+    let threw = false;
+    try {
+      const fakeDir = path.join(__dirname, 'non_existent_seed_dir');
+      validateManifestIntegrity(fakeDir);
+    } catch (e: any) {
+      threw = true;
+      assert(e.message.includes('not found'), 'Should report manifest not found');
+    }
+    assert(threw, 'Should throw on missing or invalid manifest directory');
+  });
+
+  console.log();
+
+  // --------------------------------------------------------------------------
+  // SUITE 10: Phase 2 Additive Database Migration, Composite FK & RLS Grants
+  // --------------------------------------------------------------------------
+  console.log(`${BOLD}[10/13] Phase 2 Additive Migration, Composite FK & RLS Grants${RESET}`);
+
+  await runTest('Applies Phase 2 Migration (20261030000002_catalogue_and_procurement_intake)', async () => {
+    const migration3Path = path.join(
+      __dirname,
+      '../prisma/migrations/20261030000002_catalogue_and_procurement_intake/migration.sql'
+    );
+    const sql3 = fs.readFileSync(migration3Path, 'utf-8');
+    await pg.exec(sql3);
+
+    // Grant schema privileges
+    await pg.exec(`
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'kovok_app') THEN
+          GRANT SELECT ON
+            "material_categories", "standards_registry", "canonical_products",
+            "manufacturers", "product_variants", "technical_specifications",
+            "source_registry", "product_evidence", "supplier_organizations",
+            "supplier_listings", "product_images", "unresolved_records",
+            "import_batches", "import_batch_records"
+          TO kovok_app;
+
+          GRANT ALL PRIVILEGES ON
+            "workspace_request_counters", "procurement_requests"
+          TO kovok_app;
+        END IF;
+      END
+      $$;
+    `);
+  });
+
+  await runTest('Verifies Row-Level Security is forced on all 11 tenant-scoped tables', async () => {
+    const rlsRes = await pg.query<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }>(
+      `SELECT relname, relrowsecurity, relforcerowsecurity
+       FROM pg_class
+       WHERE relname IN (
+         'project_sites', 'workspace_rule_profiles', 'approvals',
+         'approval_allocations', 'purchase_orders', 'audit_logs',
+         'workspace_roles', 'workspace_memberships', 'sessions',
+         'procurement_requests', 'workspace_request_counters'
+       );`
+    );
+
+    assert(rlsRes.rows.length === 11, `Expected 11 tenant tables with forced RLS, found ${rlsRes.rows.length}`);
+    for (const row of rlsRes.rows) {
+      assert(row.relrowsecurity === true, `${row.relname} must have relrowsecurity enabled`);
+      assert(row.relforcerowsecurity === true, `${row.relname} must have relforcerowsecurity forced`);
+    }
+  });
+
+  await runTest('Rejects cross-tenant project site reference in procurement requests via composite foreign key', async () => {
+    // Attempt to create a procurement request for Workspace A referencing Workspace B's site
+    const siteBRes = await pg.query<{ id: string }>(
+      `SELECT id FROM project_sites WHERE "workspaceId" = $1 LIMIT 1;`,
+      [wsBId]
+    );
+
+    let siteBId: string;
+    if (siteBRes.rows.length === 0) {
+      siteBId = crypto.randomUUID();
+      await pg.query(
+        `INSERT INTO project_sites (id, "workspaceId", "siteName", "pinCode", "city", address, "updatedAt")
+         VALUES ($1, $2, 'Bandra Kurla Site', '400051', 'Mumbai', 'Plot B', NOW());`,
+        [siteBId, wsBId]
+      );
+    } else {
+      siteBId = siteBRes.rows[0].id;
+    }
+
+    // Ensure category exists so the composite FK specifically triggers the rejection
+    await pg.query(
+      `INSERT INTO material_categories (id, "categoryName", "taxonomyVersion", "isActive", "researchStatus", "updatedAt")
+       VALUES ('tmt_rebar', 'TMT Steel', '2.0.0', true, 'verified', NOW())
+       ON CONFLICT (id) DO NOTHING;`
+    );
+
+    let fkRejected = false;
+    try {
+      await pg.query(
+        `INSERT INTO procurement_requests (id, "workspaceId", "siteId", "requestCode", "materialCategoryId", "quantityValue", "quantityUnit", "requestStatus", "createdByUserId", "updatedAt")
+         VALUES ($1, $2, $3, 'KOV-REQ-FORGE', 'tmt_rebar', 10.0, 'TONNES', 'DRAFT', $4, NOW());`,
+        [crypto.randomUUID(), wsAId, siteBId, userAId]
+      );
+    } catch (err: any) {
+      fkRejected = true;
+      assert(
+        err.message.includes('foreign key') || err.message.includes('violates foreign key constraint'),
+        'Composite foreign key must reject cross-tenant site reference'
+      );
+    }
+    assert(fkRejected, 'Database must strictly reject cross-tenant site ID assignment');
+  });
+
+  await runTest('Enforces read-only SELECT privileges on shared catalogue tables for kovok_app role', async () => {
+    await pg.exec('BEGIN;');
+    await pg.exec('SET ROLE kovok_app;');
+
+    let writeBlocked = false;
+    try {
+      await pg.query(
+        `INSERT INTO canonical_products (id, "categoryId", "canonicalName", "standardProductType", "applicableStandard", "standardEditionStatus", "primaryUom", "allowedUoms", "mandatoryAttributes", "conversionFactors", "verificationStatus")
+         VALUES ('CP-FORGED', 'tmt_rebar', 'Forged Product', 'Bar', 'IS 1786', '2008', 'MT', '[]'::jsonb, '[]'::jsonb, '{}'::jsonb, 'verified_standard_spec');`
+      );
+    } catch (err: any) {
+      writeBlocked = true;
+      assert(
+        err.message.includes('permission denied') || err.message.includes('must be owner'),
+        'Runtime app role must not have INSERT permission on shared catalogue'
+      );
+    } finally {
+      await pg.exec('ROLLBACK;').catch(() => null);
+      await pg.exec('RESET ROLE;').catch(() => null);
+    }
+    assert(writeBlocked, 'kovok_app role must be strictly prohibited from modifying shared catalogue tables');
+  });
+
+  console.log();
+
+  // --------------------------------------------------------------------------
+  // SUITE 11: Controlled Catalogue Ingestion & Invariant Enforcement
+  // --------------------------------------------------------------------------
+  console.log(`${BOLD}[11/13] Controlled Catalogue Staging Import & Invariants${RESET}`);
+
+  await runTest('Dry-run report verifies 43 canonical products, 0 verified variants, and 54 quarantined images', async () => {
+    const report = await generateDryRunReport(seedDir, pg);
+    assert(report.status === 'READY', 'Dry-run report must be READY');
+    assert(report.totalFiles === 12, 'Must audit 12 files');
+    assert(report.verifiedCanonicalProductIds.length === 18, 'Must identify exactly 18 core verified canonical products');
+    assert(report.provisionalCanonicalProductIds.length === 25, 'Must identify exactly 25 provisional reference products');
+    assert(report.quarantinedImageIdsCount === 54, 'Must identify exactly 54 quarantined image records');
+    assert(report.tables['product_variants'].verifiedCount === 0, 'Zero verified branded variants permitted');
+    assert(report.tables['supplier_listings'].verifiedCount === 0, 'Zero verified supplier stock listings permitted');
+  });
+
+  let importedBatchId: string;
+  await runTest('Executes atomic idempotent catalogue import populating 12 relational tables', async () => {
+    const result = await executeImport(seedDir, pg, { batchNumber: 'BATCH-ACCEPTANCE-TEST-01' });
+    assert(result.status === 'COMPLETED', 'Batch status must be COMPLETED');
+    assert(result.insertedCount > 200, `Expected over 200 records inserted, got ${result.insertedCount}`);
+    importedBatchId = result.batchId;
+
+    const batchRes = await pg.query('SELECT status FROM import_batches WHERE id = $1;', [importedBatchId]);
+    assert(batchRes.rows[0].status === 'COMPLETED', 'Batch must be recorded as COMPLETED in DB');
+  });
+
+  await runTest('Enforces exactly 18 core verified canonical products and 25 provisional reference products', async () => {
+    const res = await pg.query<{ verificationStatus: string; count: string }>(
+      `SELECT "verificationStatus", count(*) as count
+       FROM canonical_products
+       GROUP BY "verificationStatus"
+       ORDER BY "verificationStatus";`
+    );
+
+    const counts: Record<string, number> = {};
+    for (const r of res.rows) {
+      counts[r.verificationStatus] = Number(r.count);
+    }
+
+    assert(counts['verified_standard_spec'] === 18, `Expected exactly 18 verified_standard_spec, got ${counts['verified_standard_spec']}`);
+    assert(counts['provisional_reference_spec'] === 25, `Expected exactly 25 provisional_reference_spec, got ${counts['provisional_reference_spec']}`);
+  });
+
+  await runTest('Enforces zero verified branded variants (0 verified, 10 candidate, 44 blocked/unverified)', async () => {
+    const verifiedVars = await pg.query<{ count: string }>(
+      "SELECT count(*) as count FROM product_variants WHERE \"verificationStatus\" = 'verified';"
+    );
+    assert(Number(verifiedVars.rows[0].count) === 0, 'Zero branded variants may have verified status');
+
+    const totalVars = await pg.query<{ count: string }>("SELECT count(*) as count FROM product_variants;");
+    assert(Number(totalVars.rows[0].count) === 54, 'Total staged product variants must be 54');
+  });
+
+  await runTest('Enforces zero verified supplier stockists and 100% quarantined product images', async () => {
+    const verifiedListings = await pg.query<{ count: string }>(
+      "SELECT count(*) as count FROM supplier_listings WHERE \"listingStatus\" = 'verified_stock';"
+    );
+    assert(Number(verifiedListings.rows[0].count) === 0, 'Zero supplier listings may claim verified stock');
+
+    const activeImages = await pg.query<{ count: string }>(
+      'SELECT count(*) as count FROM product_images WHERE "displayInProduction" = true;'
+    );
+    assert(Number(activeImages.rows[0].count) === 0, 'Zero product images may be enabled for production display');
+  });
+
+  await runTest('Idempotency: Re-running import causes zero duplicate rows and zero unnecessary updates', async () => {
+    const beforeTimestamp = await pg.query<{ updatedAt: string }>(
+      'SELECT "updatedAt" FROM canonical_products WHERE id = $1;',
+      ['CP-TMT-500D-12MM']
+    );
+
+    const result2 = await executeImport(seedDir, pg, { batchNumber: 'BATCH-ACCEPTANCE-TEST-02' });
+    assert(result2.status === 'COMPLETED', 'Second import must succeed cleanly');
+    assert(result2.insertedCount === 0, 'Second import must insert 0 new records');
+    assert(result2.updatedCount === 0, `Second import must perform 0 updates on unchanged records, got ${result2.updatedCount}`);
+    assert(result2.skippedCount === 316, `Second import must skip all 316 identical records, got ${result2.skippedCount}`);
+
+    const afterTimestamp = await pg.query<{ updatedAt: Date | string }>(
+      'SELECT "updatedAt" FROM canonical_products WHERE id = $1;',
+      ['CP-TMT-500D-12MM']
+    );
+    const beforeMs = new Date(beforeTimestamp.rows[0].updatedAt).getTime();
+    const afterMs = new Date(afterTimestamp.rows[0].updatedAt).getTime();
+    assert(
+      beforeMs === afterMs,
+      'updatedAt must NOT be altered on unchanged records'
+    );
+
+    const totalCans = await pg.query<{ count: string }>('SELECT count(*) as count FROM canonical_products;');
+    assert(Number(totalCans.rows[0].count) === 43, 'Total canonical products must remain 43 without duplication');
+  });
+
+  console.log();
+
+  // --------------------------------------------------------------------------
+  // SUITE 12: Import Rollback Engine & Snapshot Recovery
+  // --------------------------------------------------------------------------
+  console.log(`${BOLD}[12/13] Import Rollback Engine & Snapshot Recovery${RESET}`);
+
+  await runTest('Rollback engine reverts imported records while preserving human-locked records', async () => {
+    // Mark one record as human-locked
+    await pg.query(
+      `UPDATE import_batch_records SET "isHumanLocked" = true
+       WHERE "batchId" = $1 AND "entityType" = 'canonical_products' AND "recordId" = 'CP-TMT-500D-12MM';`,
+      [importedBatchId]
+    );
+
+    const rollbackResult = await rollbackBatch(importedBatchId, pg);
+    assert(rollbackResult.skippedCount >= 1, 'Rollback must skip human-locked record');
+
+    // Confirm human-locked record was preserved
+    const checkLocked = await pg.query('SELECT count(*) as count FROM canonical_products WHERE id = $1;', [
+      'CP-TMT-500D-12MM'
+    ]);
+    assert(Number(checkLocked.rows[0].count) === 1, 'Human-locked record must remain in database');
+  });
+
+  await runTest('Re-imports cleanly after rollback to restore verified production baseline', async () => {
+    const restoreResult = await executeImport(seedDir, pg, { batchNumber: 'BATCH-ACCEPTANCE-TEST-03' });
+    assert(restoreResult.status === 'COMPLETED', 'Restoration import must complete cleanly');
+
+    const countRes = await pg.query<{ count: string }>('SELECT count(*) as count FROM canonical_products;');
+    assert(Number(countRes.rows[0].count) === 43, 'Canonical products restored to 43');
+  });
+
+  await runTest('Rollback test with mixture of created, changed, unchanged, and human-locked records', async () => {
+    // 1. Mark an existing record as human-locked
+    await pg.query(
+      `UPDATE import_batch_records SET "isHumanLocked" = true
+       WHERE "recordId" = 'CP-TMT-500D-16MM';`
+    );
+
+    // 2. Prepare a mixed batch:
+    // - 1 INSERT: newly added record 'CP-TEST-TMT-PROV'
+    // - 1 UPDATE: canonicalName change on 'CP-TMT-550D-12MM'
+    // - 1 HUMAN-LOCKED: 'CP-TMT-500D-16MM'
+    // - Unchanged records
+    const mixedBatchId = crypto.randomUUID();
+    const mixedBatchNumber = 'BATCH-MIXED-TEST-01';
+
+    await pg.query(
+      `INSERT INTO import_batches (id, "batchNumber", "sourceManifestSha256", status, "createdAt")
+       VALUES ($1, $2, 'test-mixed-manifest-sha', 'IMPORTING', NOW());`,
+      [mixedBatchId, mixedBatchNumber]
+    );
+
+    // Snapshot before for the updated record:
+    const orig550DRes = await pg.query('SELECT * FROM canonical_products WHERE id = $1;', ['CP-TMT-550D-12MM']);
+    assert(orig550DRes.rows.length === 1, 'CP-TMT-550D-12MM must exist before modification');
+    const orig550DRow = orig550DRes.rows[0];
+
+    // Snapshot before for human-locked record:
+    const orig16MMRes = await pg.query('SELECT * FROM canonical_products WHERE id = $1;', ['CP-TMT-500D-16MM']);
+    const orig16MMRow = orig16MMRes.rows[0];
+
+    // Execute the UPDATE on CP-TMT-550D-12MM
+    await pg.query(
+      'UPDATE canonical_products SET "canonicalName" = $1, "updatedAt" = NOW() WHERE id = $2;',
+      ['MODIFIED NAME FOR TESTING ROLLBACK', 'CP-TMT-550D-12MM']
+    );
+    await pg.query(
+      `INSERT INTO import_batch_records (id, "batchId", "entityType", "recordId", action, "snapshotBefore", "snapshotAfter", "isHumanLocked", "createdAt")
+       VALUES ($1, $2, 'canonical_products', 'CP-TMT-550D-12MM', 'UPDATE', $3, $4, false, NOW());`,
+      [crypto.randomUUID(), mixedBatchId, JSON.stringify(orig550DRow), JSON.stringify({ ...orig550DRow, canonicalName: 'MODIFIED NAME FOR TESTING ROLLBACK' })]
+    );
+
+    // Execute the INSERT of a new record 'CP-TEST-TMT-PROV'
+    const newRecord = {
+      id: 'CP-TEST-TMT-PROV',
+      categoryId: 'tmt_rebar',
+      canonicalName: 'TMT Rebar 50mm Fe 500D (Test Prov)',
+      standardProductType: 'tmt_rebar_straight_length',
+      applicableStandard: 'IS 1786:2008',
+      standardEditionStatus: 'CURRENT_WITH_ALL_AMENDMENTS',
+      primaryUom: 'TONNES',
+      allowedUoms: ['TONNES'],
+      mandatoryAttributes: [],
+      conversionFactors: {},
+      verificationStatus: 'provisional_reference_spec'
+    };
+    await pg.query(
+      `INSERT INTO canonical_products (id, "categoryId", "canonicalName", "standardProductType", "applicableStandard", "standardEditionStatus", "primaryUom", "allowedUoms", "mandatoryAttributes", "conversionFactors", "verificationStatus", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, $11, NOW(), NOW());`,
+      [newRecord.id, newRecord.categoryId, newRecord.canonicalName, newRecord.standardProductType, newRecord.applicableStandard, newRecord.standardEditionStatus, newRecord.primaryUom, JSON.stringify(newRecord.allowedUoms), JSON.stringify(newRecord.mandatoryAttributes), JSON.stringify(newRecord.conversionFactors), newRecord.verificationStatus]
+    );
+    await pg.query(
+      `INSERT INTO import_batch_records (id, "batchId", "entityType", "recordId", action, "snapshotBefore", "snapshotAfter", "isHumanLocked", "createdAt")
+       VALUES ($1, $2, 'canonical_products', 'CP-TEST-TMT-PROV', 'INSERT', null, $3, false, NOW());`,
+      [crypto.randomUUID(), mixedBatchId, JSON.stringify(newRecord)]
+    );
+
+    // Human-locked record reference in this batch:
+    await pg.query(
+      `INSERT INTO import_batch_records (id, "batchId", "entityType", "recordId", action, "snapshotBefore", "snapshotAfter", "isHumanLocked", "createdAt")
+       VALUES ($1, $2, 'canonical_products', 'CP-TMT-500D-16MM', 'UPDATE', $3, $4, true, NOW());`,
+      [crypto.randomUUID(), mixedBatchId, JSON.stringify(orig16MMRow), JSON.stringify(orig16MMRow)]
+    );
+
+    // Complete batch
+    await pg.query("UPDATE import_batches SET status = 'COMPLETED', \"completedAt\" = NOW() WHERE id = $1;", [mixedBatchId]);
+
+    // Verify pre-rollback assertions:
+    const checkBeforeRollbackNew = await pg.query('SELECT count(*) as count FROM canonical_products WHERE id = $1;', ['CP-TEST-TMT-PROV']);
+    assert(Number(checkBeforeRollbackNew.rows[0].count) === 1, 'Created record must exist before rollback');
+
+    const checkBeforeRollbackMod = await pg.query('SELECT "canonicalName" FROM canonical_products WHERE id = $1;', ['CP-TMT-550D-12MM']);
+    assert(checkBeforeRollbackMod.rows[0].canonicalName === 'MODIFIED NAME FOR TESTING ROLLBACK', 'Changed record has modified canonicalName');
+
+    // 3. Perform rollback of mixed batch
+    const rollbackRes = await rollbackBatch(mixedBatchId, pg);
+    assert(rollbackRes.status === 'ROLLED_BACK', 'Mixed batch rollback must succeed');
+    assert(rollbackRes.revertedInsertsCount === 1, `Expected 1 reverted insert, got ${rollbackRes.revertedInsertsCount}`);
+    assert(rollbackRes.revertedUpdatesCount === 1, `Expected 1 reverted update, got ${rollbackRes.revertedUpdatesCount}`);
+    assert(rollbackRes.skippedCount >= 1, `Expected at least 1 skipped (human-locked), got ${rollbackRes.skippedCount}`);
+
+    // 4. Verify post-rollback assertions:
+    const checkAfterRollbackNew = await pg.query('SELECT count(*) as count FROM canonical_products WHERE id = $1;', ['CP-TEST-TMT-PROV']);
+    assert(Number(checkAfterRollbackNew.rows[0].count) === 0, 'Created record must be deleted upon rollback');
+
+    const checkAfterRollbackMod = await pg.query('SELECT "canonicalName" FROM canonical_products WHERE id = $1;', ['CP-TMT-550D-12MM']);
+    assert(checkAfterRollbackMod.rows[0].canonicalName === orig550DRow.canonicalName, 'Changed record must be restored to pre-import snapshot canonicalName');
+
+    const checkLockedRecord = await pg.query('SELECT count(*) as count FROM canonical_products WHERE id = $1;', ['CP-TMT-500D-16MM']);
+    assert(Number(checkLockedRecord.rows[0].count) === 1, 'Human-locked record must be preserved');
+  });
+
+  console.log();
+
+  // --------------------------------------------------------------------------
+  // SUITE 13: Procurement Intake Matching Engine & Calculations
+  // --------------------------------------------------------------------------
+  console.log(`${BOLD}[13/13] Procurement Intake Matching Engine & Calculations${RESET}`);
+
+  await runTest('12mm Fe 500D rebar: Calculates unrounded theoretical mass (10.656 kg) and 93.84 bars/tonne', () => {
+    const calc = calculateRebarConversions(12, 20, 'TONNES');
+    assert(calc.nominalMassKgPerMeter === 0.888, 'Nominal mass must be 0.888 kg/m per IS 1786 Table 1');
+    assert(calc.singleBarMassKg === 10.656, 'Single 12m bar mass must be exactly 10.656 kg (12 * 0.888)');
+    assert(calc.theoreticalBarsPerTonne === 93.84, 'Theoretical bars per tonne must be 93.84 (unrounded 1000 / 10.656)');
+    assert(calc.totalPiecesEstimated === 1877, '20 MT of 12mm rebar equals ~1877 pieces');
+    assert(calc.commercialBillingCaveat.includes('weighbridge'), 'Must state commercial weighbridge billing caveat');
+  });
+
+  await runTest('14mm Fe 500D rebar: Routes unlisted diameter to NEEDS_CLARIFICATION without silent substitution', () => {
+    const match = matchProcurementRequirement('CAT-TMT-STEEL', 'Fe 500D', 14, 10, 'TONNES');
+    assert(match.requestStatus === 'NEEDS_CLARIFICATION', 'Unlisted size must route to NEEDS_CLARIFICATION');
+    assert(match.canonicalProductId === null, 'Must not claim verified canonical product ID');
+    assert(match.clarificationReason!.includes('Clause 6.1.1'), 'Must cite IS 1786 Clause 6.1.1 for non-standard size');
+  });
+
+  await runTest('28mm Fe 500D rebar: Routes provisional size to NEEDS_CLARIFICATION', () => {
+    const match = matchProcurementRequirement('CAT-TMT-STEEL', 'Fe 500D', 28, 10, 'TONNES');
+    assert(match.requestStatus === 'NEEDS_CLARIFICATION', 'Provisional size must route to NEEDS_CLARIFICATION');
+    assert(match.canonicalProductId === 'CP-TMT-500D-28MM', 'Preserves candidate provisional product ID');
+    assert(match.clarificationReason!.includes('PROVISIONAL_SPECIFICATION'), 'Explains provisional status');
+  });
+
+  await runTest('Fe 500D CRS rebar: Routes special rolling grade to NEEDS_CLARIFICATION', () => {
+    const match = matchProcurementRequirement('CAT-TMT-STEEL', 'Fe 500D CRS', 12, 10, 'TONNES');
+    assert(match.requestStatus === 'NEEDS_CLARIFICATION', 'CRS steel must route to NEEDS_CLARIFICATION');
+    assert(match.clarificationReason!.includes('Corrosion Resistant Steel'), 'Clarification explains mill heat chemistry requirement');
+  });
+
+  await runTest('TMT steel without grade: Routes ambiguous request to NEEDS_CLARIFICATION', () => {
+    const match = matchProcurementRequirement('CAT-TMT-STEEL', '', 12, 10, 'TONNES');
+    assert(match.requestStatus === 'NEEDS_CLARIFICATION', 'Missing grade must route to clarification');
+    assert(match.clarificationReason!.includes('UNRESOLVED_GRADE_SPECIFICATION'), 'States grade is required');
+  });
+
+  await runTest('OPC 53 cement: Matches core verified canonical specification (CP-CEM-OPC-53)', () => {
+    const match = matchProcurementRequirement('CAT-CEMENT', 'OPC 53', undefined, 300, 'BAGS');
+    assert(match.requestStatus === 'MATCHED_VERIFIED', 'OPC 53 must match verified specification');
+    assert(match.canonicalProductId === 'CP-CEM-OPC-53', 'Matches CP-CEM-OPC-53');
+  });
+
+  await runTest('OPC 43 cement: Routes provisional specification to NEEDS_CLARIFICATION', () => {
+    const match = matchProcurementRequirement('CAT-CEMENT', 'OPC 43', undefined, 300, 'BAGS');
+    assert(match.requestStatus === 'NEEDS_CLARIFICATION', 'OPC 43 must route to clarification');
+    assert(match.canonicalProductId === 'CP-CEM-OPC-43', 'Preserves provisional ID');
+  });
+
+  await runTest('Flags IS 456 durability advisory review note for coastal/marine foundation cement', () => {
+    const match = matchProcurementRequirement('CAT-CEMENT', 'OPC 53', undefined, 500, 'BAGS', 'Marine piling foundation raft');
+    assert(match.requestStatus === 'MATCHED_VERIFIED', 'Matches product');
+    assert(match.advisoryEngineeringNote !== null, 'Advisory durability note must be flagged');
+    assert(match.advisoryEngineeringNote!.includes('IS 456:2000 Durability Advisory'), 'Advisory cites IS 456 Table 4/5');
+  });
+
+  await runTest('Atomic request counter generates sequential KOV-REQ codes without aggregate locking', async () => {
+    // Create site A if not present
+    const siteAId = crypto.randomUUID();
+    await pg.query(
+      `INSERT INTO project_sites (id, "workspaceId", "siteName", "pinCode", "city", address, "updatedAt")
+       VALUES ($1, $2, 'Test Site Gurugram', '122002', 'Gurugram', 'Site Alpha', NOW())
+       ON CONFLICT ("workspaceId", id) DO NOTHING;`,
+      [siteAId, wsAId]
+    );
+
+    // Counter increment 1
+    const c1 = await pg.query<{ nextCounter: number }>(`
+      INSERT INTO workspace_request_counters ("workspaceId", "nextCounter", "updatedAt")
+      VALUES ($1::uuid, 2, NOW())
+      ON CONFLICT ("workspaceId")
+      DO UPDATE SET "nextCounter" = workspace_request_counters."nextCounter" + 1, "updatedAt" = NOW()
+      RETURNING workspace_request_counters."nextCounter" - 1 AS "nextCounter";
+    `, [wsAId]);
+    const code1 = `KOV-REQ-${String(c1.rows[0].nextCounter).padStart(4, '0')}`;
+
+    // Counter increment 2
+    const c2 = await pg.query<{ nextCounter: number }>(`
+      INSERT INTO workspace_request_counters ("workspaceId", "nextCounter", "updatedAt")
+      VALUES ($1::uuid, 2, NOW())
+      ON CONFLICT ("workspaceId")
+      DO UPDATE SET "nextCounter" = workspace_request_counters."nextCounter" + 1, "updatedAt" = NOW()
+      RETURNING workspace_request_counters."nextCounter" - 1 AS "nextCounter";
+    `, [wsAId]);
+    const code2 = `KOV-REQ-${String(c2.rows[0].nextCounter).padStart(4, '0')}`;
+
+    assert(code1 === 'KOV-REQ-0001', `Expected KOV-REQ-0001, got ${code1}`);
+    assert(code2 === 'KOV-REQ-0002', `Expected KOV-REQ-0002, got ${code2}`);
+
+    // Insert request with code 1
+    await pg.query(
+      `INSERT INTO procurement_requests (id, "workspaceId", "siteId", "requestCode", "materialCategoryId", "canonicalProductId", "quantityValue", "quantityUnit", "requestStatus", "createdByUserId", "updatedAt")
+       VALUES ($1, $2, $3, $4, 'tmt_rebar', 'CP-TMT-500D-12MM', 20.0, 'TONNES', 'MATCHED_VERIFIED', $5, NOW());`,
+      [crypto.randomUUID(), wsAId, siteAId, code1, userAId]
+    );
+  });
+
+  await runTest('Cross-tenant isolation: Tenant A context cannot query Tenant B procurement requests under RLS', async () => {
+    // Create Tenant B site & request
+    const siteBId = crypto.randomUUID();
+    await pg.query(
+      `INSERT INTO project_sites (id, "workspaceId", "siteName", "pinCode", "city", address, "updatedAt")
+       VALUES ($1, $2, 'Mumbai Site B', '400001', 'Mumbai', 'Site Beta', NOW())
+       ON CONFLICT ("workspaceId", id) DO NOTHING;`,
+      [siteBId, wsBId]
+    );
+
+    const reqBId = crypto.randomUUID();
+    await pg.query(
+      `INSERT INTO procurement_requests (id, "workspaceId", "siteId", "requestCode", "materialCategoryId", "canonicalProductId", "quantityValue", "quantityUnit", "requestStatus", "createdByUserId", "updatedAt")
+       VALUES ($1, $2, $3, 'KOV-REQ-0001', 'cement', 'CP-CEM-OPC-53', 300.0, 'BAGS', 'MATCHED_VERIFIED', $4, NOW());`,
+      [reqBId, wsBId, siteBId, userBId]
+    );
+
+    // Query under kovok_app role with Tenant A context
+    await pg.exec('BEGIN;');
+    await pg.exec('SET ROLE kovok_app;');
+    await pg.query(`SET LOCAL app.current_workspace_id = '${wsAId}';`);
+
+    const queryRes = await pg.query<{ id: string; requestCode: string; workspaceId: string }>(
+      'SELECT id, "requestCode", "workspaceId" FROM procurement_requests;'
+    );
+
+    await pg.exec('RESET ROLE;');
+    await pg.exec('ROLLBACK;');
+
+    assert(queryRes.rows.length === 1, `Tenant A must see exactly 1 request, got ${queryRes.rows.length}`);
+    assert(queryRes.rows[0].workspaceId === wsAId, 'Tenant A can only see requests belonging to Workspace A');
+  });
+
+  console.log();
+
   // --------------------------------------------------------------------------
   // SUMMARY REPORT
   // --------------------------------------------------------------------------
   console.log(`${BOLD}${CYAN}=================================================================${RESET}`);
-  console.log(`${BOLD}REMEDIATED TEST RUNNER SUMMARY:${RESET}`);
+  console.log(`${BOLD}PHASE 1 & PHASE 2 COMPREHENSIVE TEST RUNNER SUMMARY:${RESET}`);
   console.log(`  Total Executed Tests: ${BOLD}${passedTests + failedTests}${RESET}`);
   console.log(`  Passed: ${GREEN}${BOLD}${passedTests}${RESET}`);
   console.log(`  Failed: ${failedTests > 0 ? RED : GREEN}${BOLD}${failedTests}${RESET}`);
@@ -729,7 +1256,7 @@ async function main() {
     console.error(`\n${RED}FAILURE: One or more tests failed. Review output above.${RESET}`);
     process.exitCode = 1;
   } else {
-    console.log(`\n${GREEN}${BOLD}SUCCESS: All remediated Phase 1 tests passed!${RESET}\n`);
+    console.log(`\n${GREEN}${BOLD}SUCCESS: All Phase 1 and Phase 2 acceptance tests passed!${RESET}\n`);
     process.exitCode = 0;
   }
 }

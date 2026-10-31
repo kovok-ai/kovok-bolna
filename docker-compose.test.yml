@@ -1,0 +1,51 @@
+# ==============================================================================
+# Kovok Construction Procurement Platform — Phase 2 Isolated Test Environment
+# ==============================================================================
+# Usage:
+#   docker compose -f docker-compose.test.yml up -d
+#   docker compose -f docker-compose.test.yml down -v
+# ==============================================================================
+
+version: '3.8'
+
+services:
+  # 1. Primary PostgreSQL 16 Instance
+  postgres_test:
+    image: postgres:16-alpine
+    container_name: kovok_postgres_test
+    restart: unless-stopped
+    ports:
+      # Bound strictly to loopback interface (never exposed to public interfaces)
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: kovok_test_postgres_pass
+      POSTGRES_DB: kovok_procurement_test
+    volumes:
+      - ./scripts/01_bootstrap_test_db.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d kovok_procurement_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  # 2. Connection Pooler (pgBouncer in transaction pooling mode)
+  pgbouncer_test:
+    image: edoburu/pgbouncer:latest
+    container_name: kovok_pgbouncer_test
+    restart: unless-stopped
+    depends_on:
+      postgres_test:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:6432:6432"
+    environment:
+      DB_USER: postgres
+      DB_PASSWORD: kovok_test_postgres_pass
+      DB_HOST: postgres_test
+      DB_PORT: 5432
+      DB_NAME: kovok_procurement_test
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 100
+      DEFAULT_POOL_SIZE: 20
+      AUTH_TYPE: plain
