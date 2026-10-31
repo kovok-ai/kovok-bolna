@@ -19,20 +19,21 @@
     "test:real-postgres": "tsx --env-file=.env tests/real-postgres-integration.ts"
   },
   "dependencies": {
+    "@prisma/client": "6.19.3",
+    "lucide-react": "^1.66.0",
     "next": "16.2.12",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "@prisma/client": "6.19.3",
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "typescript": "^5.7.3",
+    "@electric-sql/pglite": "^0.5.13",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "prisma": "6.19.3",
     "tsx": "^4.19.3",
-    "@electric-sql/pglite": "^0.5.13"
+    "typescript": "^5.7.3"
   },
   "engines": {
     "node": ">=24.0.0"

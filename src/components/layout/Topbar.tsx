@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { Menu, Search, HelpCircle, Plus } from 'lucide-react';
 
 interface TopbarProps {
   workspaceName?: string;
@@ -15,7 +16,7 @@ interface TopbarProps {
 export function Topbar({
   workspaceName = 'Concrete & Co.',
   currentPageTitle,
-  isSandbox = true,
+  isSandbox = false,
   onNewRequest,
   onToggleMenu,
   onSearch,
@@ -28,22 +29,24 @@ export function Topbar({
         onClick={onToggleMenu}
         aria-label="Open navigation"
       >
-        ☰
+        <Menu size={18} />
       </button>
 
       <div className="crumb">
         <span className="crumb-full">{workspaceName} /</span>
         <b>{currentPageTitle}</b>
-        {isSandbox && <span className="sample">SAMPLE DATA</span>}
+        {isSandbox && <span className="sample">SANDBOX</span>}
       </div>
 
       <div className="top-actions">
         <label className="search">
-          <span aria-hidden="true">⌕</span>
+          <span aria-hidden="true" style={{ display: 'grid', placeItems: 'center' }}>
+            <Search size={14} />
+          </span>
           <input
             id="globalSearch"
-            placeholder="Search anything"
-            aria-label="Search anything"
+            placeholder="Search material, code, PO..."
+            aria-label="Search material, code, PO"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && onSearch) {
                 onSearch((e.target as HTMLInputElement).value);
@@ -54,13 +57,13 @@ export function Topbar({
         <button
           className="icon-btn"
           onClick={onHelp}
-          title="Help & documentation"
+          title="Procurement documentation and guidelines"
           aria-label="Help"
         >
-          ?
+          <HelpCircle size={16} />
         </button>
         <button className="btn btn-primary" onClick={onNewRequest}>
-          + New request
+          <Plus size={14} style={{ marginRight: '4px' }} /> New Request
         </button>
       </div>
     </header>

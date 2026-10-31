@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { Check, Zap, CheckCircle2, AlertTriangle, X, ArrowRight } from 'lucide-react';
 import {
   calculateRebarConversions,
   matchProcurementRequirement,
@@ -186,7 +187,7 @@ export function NewRequestModal({
             <p>{captions[step]}</p>
           </div>
           <button className="icon-btn" onClick={onClose} aria-label="Close modal">
-            ×
+            <X size={16} />
           </button>
         </div>
 
@@ -198,7 +199,7 @@ export function NewRequestModal({
                 key={t}
                 className={`step ${i === step ? 'active' : i < step ? 'done' : ''}`}
               >
-                <span className="num">{i < step ? '✓' : i + 1}</span>
+                <span className="num">{i < step ? <Check size={12} style={{ display: 'inline' }} /> : i + 1}</span>
                 <span className="crumb-full">{t}</span>
               </div>
             ))}
@@ -232,7 +233,7 @@ export function NewRequestModal({
                     flex: 'none',
                   }}
                 >
-                  ⚡
+                  <Zap size={18} />
                 </div>
                 <div>
                   <strong style={{ fontSize: '12px' }}>Intelligent Material Intake</strong>
@@ -416,8 +417,18 @@ export function NewRequestModal({
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 700, color: matchResult.requestStatus === 'MATCHED_VERIFIED' ? '#15803d' : '#b45309' }}>
-                      {matchResult.requestStatus === 'MATCHED_VERIFIED' ? '✓ STATUTORY SPECIFICATION MATCH' : '⚠ TECHNICAL CLARIFICATION REQUIRED'}
+                    <span style={{ fontSize: '11px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '5px', color: matchResult.requestStatus === 'MATCHED_VERIFIED' ? '#15803d' : '#b45309' }}>
+                      {matchResult.requestStatus === 'MATCHED_VERIFIED' ? (
+                        <>
+                          <Check size={13} />
+                          STATUTORY SPECIFICATION MATCH
+                        </>
+                      ) : (
+                        <>
+                          <AlertTriangle size={13} />
+                          TECHNICAL CLARIFICATION REQUIRED
+                        </>
+                      )}
                     </span>
                     <span className={`pill ${matchResult.requestStatus === 'MATCHED_VERIFIED' ? 'green' : 'amber'}`}>
                       <span className="dot"></span>
@@ -561,7 +572,11 @@ export function NewRequestModal({
                       margin: '0 auto 14px',
                     }}
                   >
-                    {submissionResult.match.requestStatus === 'MATCHED_VERIFIED' ? '✓' : '!'}
+                    {submissionResult.match.requestStatus === 'MATCHED_VERIFIED' ? (
+                      <CheckCircle2 size={28} />
+                    ) : (
+                      <AlertTriangle size={28} />
+                    )}
                   </div>
                   <h3 style={{ margin: '0 0 6px', fontSize: '18px' }}>
                     Request {submissionResult.request.requestCode} Created
@@ -582,8 +597,8 @@ export function NewRequestModal({
                     </div>
                   )}
                   <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-                    <button className="btn btn-primary" onClick={onClose}>
-                      View in Requests List →
+                    <button className="btn btn-primary" onClick={onClose} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                      View in Requests List <ArrowRight size={14} />
                     </button>
                   </div>
                 </div>

@@ -1,6 +1,20 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import {
+  FileText,
+  PhoneCall,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
+  ExternalLink,
+  RefreshCw,
+  Plus,
+  X,
+  Building2,
+  Check,
+  AlertTriangle,
+} from 'lucide-react';
 import { getProductVisualAsset } from '@/lib/catalogue/product-images';
 
 export interface ProcurementRequestItem {
@@ -32,6 +46,8 @@ export interface ProcurementRequestItem {
     id: string;
     categoryName: string;
   };
+  calls?: any[];
+  quotations?: any[];
 }
 
 interface RequestsViewProps {
@@ -52,6 +68,20 @@ export function RequestsView({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<ProcurementRequestItem | null>(null);
+
+  // Supplier Outbound Call Modal State
+  const [isCallModalOpen, setIsCallModalOpen] = useState(false);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [selectedSupplierId, setSelectedSupplierId] = useState<string>('');
+  const [phoneOverride, setPhoneOverride] = useState<string>('');
+  const [isCalling, setIsCalling] = useState(false);
+  const [callFeedback, setCallFeedback] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
 
   const fetchRequests = useCallback(() => {
     setLoading(true);
@@ -81,6 +111,81 @@ export function RequestsView({
     fetchRequests();
   }, [fetchRequests, refreshTrigger]);
 
+  // Load suppliers when call modal is opened
+  useEffect(() => {
+    if (isCallModalOpen && suppliers.length === 0) {
+      fetch('/api/catalogue/suppliers')
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.suppliers && data.suppliers.length > 0) {
+            setSuppliers(data.suppliers);
+            setSelectedSupplierId(data.suppliers[0].id);
+          }
+        })
+        .catch((err) => console.error('Failed to load suppliers for calling:', err));
+    }
+  }, [isCallModalOpen, suppliers.length]);
+
+  const handleInitiateCall = async () => {
+    if (!selectedRequest || !selectedSupplierId) return;
+    setIsCalling(true);
+    setCallFeedback(null);
+
+    try {
+      const res = await fetch('/api/procurement/calls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          procurementRequestId: selectedRequest.id,
+          supplierId: selectedSupplierId,
+          supplierPhoneOverride: phoneOverride.trim() || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok && !data.call) {
+        throw new Error(data.error || 'Failed to dispatch voice call');
+      }
+
+      if (data.success) {
+        showToast(`Voice agent outbound call queued for ${data.call.supplier?.organizationName || 'supplier'}.`);
+        setCallFeedback('Outbound call queued successfully. Sarvam AI agent will dial supplier.');
+      } else {
+        setCallFeedback(data.warning || 'Call simulated: Telephony credentials pending in environment.');
+        showToast('Call logged. Telephony gateway requires configuration in production.');
+      }
+
+      // Refresh request details to show call attempt
+      fetchRequests();
+      setTimeout(() => {
+        setIsCallModalOpen(false);
+        setCallFeedback(null);
+      }, 2500);
+    } catch (err: any) {
+      console.error('Call initiation error:', err);
+      setCallFeedback(`Error: ${err.message}`);
+    } finally {
+      setIsCalling(false);
+    }
+  };
+
+  const handleUpdateStatus = async (newStatus: 'HOLD' | 'CANCELLED') => {
+    if (!selectedRequest) return;
+    try {
+      const res = await fetch(`/api/procurement/requests/${selectedRequest.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestStatus: newStatus }),
+      });
+      if (!res.ok) throw new Error('Status update failed');
+      showToast(`Request ${selectedRequest.requestCode} moved to ${newStatus}.`);
+      setSelectedRequest(null);
+      fetchRequests();
+    } catch (err: any) {
+      showToast(`Error: ${err.message}`);
+    }
+  };
+
   const filtered = requests.filter((r) => {
     if (filter === 'ALL') return true;
     return r.requestStatus === filter;
@@ -91,20 +196,27 @@ export function RequestsView({
 
   return (
     <div>
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="toast" style={{ top: '24px', zIndex: 1100 }}>
+          {toastMessage}
+        </div>
+      )}
+
       <div className="page-head">
         <div>
           <h1>Procurement Requests</h1>
           <p>
-            {requests.length} Total Requests · {verifiedCount} Verified Standard Matches · {clarificationCount} Requiring Clarification
+            {requests.length} Total Requests &middot; {verifiedCount} Verified Standard Matches &middot; {clarificationCount} Requiring Clarification
           </p>
         </div>
         <div className="head-actions">
           <button className="btn btn-secondary" onClick={fetchRequests} title="Refresh requests list">
-            ↻ Refresh
+            <RefreshCw size={13} style={{ marginRight: '6px' }} /> Refresh
           </button>
           {onNewRequest && (
             <button className="btn btn-primary" onClick={onNewRequest}>
-              + New Request
+              <Plus size={14} style={{ marginRight: '4px' }} /> New Request
             </button>
           )}
         </div>
@@ -113,8 +225,8 @@ export function RequestsView({
       <section className="panel">
         <div className="panel-head">
           <div>
-            <h2>All Requests ({filtered.length})</h2>
-            <p>Committed to PostgreSQL under strict tenant Row-Level Security isolation</p>
+            <h2>All Requisitions ({filtered.length})</h2>
+            <p>Committed under strict tenant Row-Level Security isolation</p>
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <select
@@ -149,10 +261,10 @@ export function RequestsView({
                 display: 'grid',
                 placeItems: 'center',
                 margin: '0 auto 12px',
-                fontSize: '20px',
+                color: '#1e40af',
               }}
             >
-              📋
+              <FileText size={24} />
             </div>
             <strong style={{ display: 'block', fontSize: '14px', color: '#1e293b', marginBottom: '6px' }}>
               No procurement requests yet
@@ -162,7 +274,7 @@ export function RequestsView({
             </p>
             {onNewRequest && (
               <button className="btn btn-primary" onClick={onNewRequest}>
-                + Create First Request
+                <Plus size={14} style={{ marginRight: '4px' }} /> Create First Request
               </button>
             )}
           </div>
@@ -172,8 +284,8 @@ export function RequestsView({
               <thead>
                 <tr>
                   <th>Request Code</th>
-                  <th>Material & Specification</th>
-                  <th>Quantity · Destination</th>
+                  <th>Material &amp; Specification</th>
+                  <th>Quantity &middot; Destination</th>
                   <th>Status</th>
                   <th>Catalogue Match / Clarification</th>
                   <th></th>
@@ -275,7 +387,7 @@ export function RequestsView({
                             if (onOpenRequest) onOpenRequest(r.requestCode);
                           }}
                         >
-                          View Details →
+                          View Details &rarr;
                         </button>
                       </td>
                     </tr>
@@ -293,11 +405,11 @@ export function RequestsView({
           className="modal-backdrop"
           onClick={(e) => e.target === e.currentTarget && setSelectedRequest(null)}
         >
-          <div className="modal" style={{ maxWidth: '620px' }}>
+          <div className="modal" style={{ maxWidth: '640px' }}>
             <div className="modal-head">
               <div>
                 <div className="eyebrow">
-                  PROCUREMENT REQUEST DETAILS · {selectedRequest.requestCode}
+                  PROCUREMENT REQUEST DETAILS &middot; {selectedRequest.requestCode}
                 </div>
                 <h2>
                   {selectedRequest.materialCategoryId === 'tmt_rebar'
@@ -317,7 +429,7 @@ export function RequestsView({
                 onClick={() => setSelectedRequest(null)}
                 aria-label="Close details"
               >
-                ×
+                <X size={16} />
               </button>
             </div>
 
@@ -369,7 +481,7 @@ export function RequestsView({
                         </span>
                       </div>
                       <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
-                        {visual.applicableStandard} · {visual.attribution}
+                        {visual.applicableStandard} &middot; {visual.attribution}
                       </div>
                     </div>
                   </div>
@@ -393,19 +505,26 @@ export function RequestsView({
                 }}
               >
                 <div>
-                  <span
-                    style={{
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      color:
-                        selectedRequest.requestStatus === 'MATCHED_VERIFIED' ? '#15803d' : '#b45309',
-                    }}
-                  >
-                    {selectedRequest.requestStatus === 'MATCHED_VERIFIED'
-                      ? '✓ VERIFIED CANONICAL SPECIFICATION'
-                      : '⚠ TECHNICAL CLARIFICATION REQUIRED'}
-                  </span>
-                  <div style={{ fontSize: '12px', color: '#334155', marginTop: '2px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {selectedRequest.requestStatus === 'MATCHED_VERIFIED' ? (
+                      <CheckCircle2 size={14} className="text-green-600" />
+                    ) : (
+                      <AlertTriangle size={14} className="text-amber-600" />
+                    )}
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        color:
+                          selectedRequest.requestStatus === 'MATCHED_VERIFIED' ? '#15803d' : '#b45309',
+                      }}
+                    >
+                      {selectedRequest.requestStatus === 'MATCHED_VERIFIED'
+                        ? 'VERIFIED CANONICAL SPECIFICATION'
+                        : 'TECHNICAL CLARIFICATION REQUIRED'}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#334155', marginTop: '4px' }}>
                     {selectedRequest.canonicalProduct ? (
                       <>
                         Product ID: <code>{selectedRequest.canonicalProduct.id}</code> (
@@ -470,7 +589,7 @@ export function RequestsView({
                 )}
               </div>
 
-              {/* Conversions (for Steel) */}
+              {/* Theoretical Rebar Conversions */}
               {selectedRequest.derivedCalculations && (
                 <div
                   style={{
@@ -501,6 +620,9 @@ export function RequestsView({
                       Estimated Count: ~{selectedRequest.derivedCalculations.totalPiecesEstimated} pieces (12m standard bars)
                     </div>
                   )}
+                  <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>
+                    *Final billing is based on physical weighbridge scale readings, not theoretical rebar counts.
+                  </div>
                 </div>
               )}
 
@@ -514,9 +636,9 @@ export function RequestsView({
                   <strong>{selectedRequest.site.siteName}</strong>
                 </div>
                 <div className="kv">
-                  <span>City & Pin Code</span>
+                  <span>City &amp; PIN Code</span>
                   <strong>
-                    {selectedRequest.site.city} — {selectedRequest.site.pinCode}
+                    {selectedRequest.site.city} &mdash; {selectedRequest.site.pinCode}
                   </strong>
                 </div>
                 {selectedRequest.site.address && (
@@ -527,21 +649,50 @@ export function RequestsView({
                 )}
               </div>
 
-              {/* Sourcing & Voice Workflow Status Banner */}
+              {/* Sourcing Actions Banner */}
               <div
                 style={{
                   border: '1px solid #dbeafe',
                   background: '#eff6ff',
-                  padding: '12px 14px',
+                  padding: '14px',
                   borderRadius: '8px',
-                  fontSize: '11px',
-                  color: '#1e40af',
+                  marginBottom: '16px',
                 }}
               >
-                <strong>Sourcing Workflow Status:</strong>
-                <p style={{ margin: '4px 0 0', lineHeight: 1.45 }}>
-                  Procurement request is committed to the workspace outbox. Automated quote intake and Sarvam AI voice agent outreach will query verified regional stockists within permitted calling hours (10:00 - 18:00 IST).
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <PhoneCall size={16} className="text-blue-600" />
+                    <strong style={{ fontSize: '13px', color: '#1e40af' }}>Sarvam Voice Sourcing</strong>
+                  </div>
+                  <button
+                    className="btn btn-primary"
+                    style={{ fontSize: '12px', padding: '6px 14px' }}
+                    onClick={() => setIsCallModalOpen(true)}
+                  >
+                    Initiate Supplier Call
+                  </button>
+                </div>
+                <p style={{ margin: 0, fontSize: '11.5px', color: '#3b82f6', lineHeight: 1.45 }}>
+                  Trigger an automated voice agent call to gather structured quotations (base rate, GST, freight, and lead time) directly from authorized regional suppliers.
                 </p>
+              </div>
+
+              {/* Workflow State Controls */}
+              <div style={{ display: 'flex', gap: '10px', marginTop: '14px' }}>
+                <button
+                  className="btn btn-secondary"
+                  style={{ fontSize: '12px', color: '#b45309' }}
+                  onClick={() => handleUpdateStatus('HOLD')}
+                >
+                  Hold Requisition
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  style={{ fontSize: '12px', color: '#b91c1c' }}
+                  onClick={() => handleUpdateStatus('CANCELLED')}
+                >
+                  Cancel Requisition
+                </button>
               </div>
             </div>
 
@@ -551,6 +702,104 @@ export function RequestsView({
               </span>
               <button className="btn btn-primary" onClick={() => setSelectedRequest(null)}>
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Outbound Voice Call Initiation Confirmation Modal */}
+      {isCallModalOpen && selectedRequest && (
+        <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && !isCalling && setIsCallModalOpen(false)}>
+          <div className="modal" style={{ maxWidth: '540px' }}>
+            <div className="modal-head">
+              <div>
+                <div className="eyebrow">SARVAM VOICE TELEPHONY AGENT</div>
+                <h2>Initiate Quotation Call</h2>
+                <p>Requirement: {selectedRequest.requestCode} &middot; {selectedRequest.quantityValue} {selectedRequest.quantityUnit}</p>
+              </div>
+              <button className="icon-btn" onClick={() => !isCalling && setIsCallModalOpen(false)}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="wizard-main">
+              <div className="field" style={{ marginBottom: '14px' }}>
+                <label>Select Target Supplier Organization</label>
+                <select
+                  value={selectedSupplierId}
+                  onChange={(e) => setSelectedSupplierId(e.target.value)}
+                  disabled={isCalling}
+                  aria-label="Select target supplier"
+                >
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.organizationName} ({s.supplierType.replace(/_/g, ' ')}) &mdash; {s.contactPhone || 'No phone'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="field" style={{ marginBottom: '16px' }}>
+                <label>Phone Number Override (Optional)</label>
+                <input
+                  placeholder="e.g. +919876543210 (Leave blank to use registered contact)"
+                  value={phoneOverride}
+                  onChange={(e) => setPhoneOverride(e.target.value)}
+                  disabled={isCalling}
+                />
+                <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
+                  Valid 10-digit Indian mobile or landline starting with 6-9
+                </span>
+              </div>
+
+              <div
+                style={{
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  fontSize: '11.5px',
+                  color: '#334155',
+                  marginBottom: '14px',
+                }}
+              >
+                <div style={{ fontWeight: 600, color: '#1e293b', marginBottom: '4px' }}>
+                  Voice Agent Script Summary:
+                </div>
+                The AI assistant will state the exact requirement ({selectedRequest.quantityValue} {selectedRequest.quantityUnit} to {selectedRequest.site.city}), collect base rate, GST rate, freight, unloading, and quote validity. Resulting quotations are marked <strong>Pending Review</strong> and must be explicitly approved by buyer.
+              </div>
+
+              {callFeedback && (
+                <div
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    background: callFeedback.includes('Error') ? '#fef2f2' : '#f0fdf4',
+                    color: callFeedback.includes('Error') ? '#b91c1c' : '#15803d',
+                    border: `1px solid ${callFeedback.includes('Error') ? '#fecaca' : '#bbf7d0'}`,
+                  }}
+                >
+                  {callFeedback}
+                </div>
+              )}
+            </div>
+
+            <div className="wizard-footer">
+              <button
+                className="btn btn-secondary"
+                disabled={isCalling}
+                onClick={() => setIsCallModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                disabled={isCalling}
+                onClick={handleInitiateCall}
+              >
+                {isCalling ? 'Dispatching Call...' : 'Confirm & Place Call'}
               </button>
             </div>
           </div>

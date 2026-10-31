@@ -1,6 +1,19 @@
 'use client';
 
 import React from 'react';
+import {
+  LayoutDashboard,
+  FileText,
+  BadgeDollarSign,
+  Package,
+  AlertTriangle,
+  BookOpen,
+  Users,
+  Cpu,
+  Settings,
+  ChevronDown,
+  LogOut,
+} from 'lucide-react';
 
 export type PageId =
   | 'overview'
@@ -24,6 +37,8 @@ interface SidebarProps {
   onOpenSetup?: () => void;
   onLogout?: () => void;
   requestCount?: number;
+  quotationCount?: number;
+  exceptionCount?: number;
 }
 
 export function Sidebar({
@@ -37,6 +52,8 @@ export function Sidebar({
   onOpenSetup,
   onLogout,
   requestCount,
+  quotationCount,
+  exceptionCount,
 }: SidebarProps) {
   const getInitials = (name: string) => {
     return name
@@ -72,7 +89,7 @@ export function Sidebar({
           <strong>{workspaceName}</strong>
           <small>{workspaceSubtitle}</small>
         </div>
-        <span className="workspace-chevron">⌄</span>
+        <ChevronDown size={14} className="workspace-chevron" />
       </button>
 
       {/* Workspace Navigation */}
@@ -84,12 +101,7 @@ export function Sidebar({
             onClick={() => onPageChange('overview')}
           >
             <span className="nav-ico">
-              <svg viewBox="0 0 24 24">
-                <rect x="3.5" y="3.5" width="7" height="7" rx="1" />
-                <rect x="13.5" y="3.5" width="7" height="7" rx="1" />
-                <rect x="3.5" y="13.5" width="7" height="7" rx="1" />
-                <rect x="13.5" y="13.5" width="7" height="7" rx="1" />
-              </svg>
+              <LayoutDashboard size={16} />
             </span>
             Overview
           </button>
@@ -98,66 +110,50 @@ export function Sidebar({
             onClick={() => onPageChange('requests')}
           >
             <span className="nav-ico">
-              <svg viewBox="0 0 24 24">
-                <path d="M8 6h12M8 12h12M8 18h12" />
-                <circle cx="4" cy="6" r=".8" />
-                <circle cx="4" cy="12" r=".8" />
-                <circle cx="4" cy="18" r=".8" />
-              </svg>
+              <FileText size={16} />
             </span>
-            Requests <span className="count">{requestCount !== undefined ? requestCount : 6}</span>
+            Requests {requestCount !== undefined && <span className="count">{requestCount}</span>}
           </button>
           <button
             className={`nav-btn ${currentPage === 'quotations' ? 'active' : ''}`}
             onClick={() => onPageChange('quotations')}
           >
             <span className="nav-ico">
-              <svg viewBox="0 0 24 24">
-                <path d="M4 7h16M4 17h16M8 4v6M16 14v6" />
-              </svg>
+              <BadgeDollarSign size={16} />
             </span>
-            Quotations <span className="count">3</span>
+            Quotations {quotationCount !== undefined && <span className="count">{quotationCount}</span>}
           </button>
           <button
             className={`nav-btn ${currentPage === 'orders' ? 'active' : ''}`}
             onClick={() => onPageChange('orders')}
           >
             <span className="nav-ico">
-              <svg viewBox="0 0 24 24">
-                <path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5z" />
-                <path d="M4.5 7.8 12 12l7.5-4.2M12 12v8.5" />
-              </svg>
+              <Package size={16} />
             </span>
-            Orders
+            Orders &amp; delivery
           </button>
           <button
             className={`nav-btn ${currentPage === 'exceptions' ? 'active' : ''}`}
             onClick={() => onPageChange('exceptions')}
           >
             <span className="nav-ico">
-              <svg viewBox="0 0 24 24">
-                <path d="M12 3.5 21 20H3z" />
-                <path d="M12 9v5M12 17.2h.01" />
-              </svg>
+              <AlertTriangle size={16} />
             </span>
-            Exceptions <span className="count">2</span>
+            Exceptions {exceptionCount !== undefined && <span className="count">{exceptionCount}</span>}
           </button>
         </nav>
       </div>
 
       {/* Data Navigation */}
       <div>
-        <div className="nav-caption">DATA</div>
+        <div className="nav-caption">DATA &amp; DISCOVERY</div>
         <nav className="nav">
           <button
             className={`nav-btn ${currentPage === 'catalog' ? 'active' : ''}`}
             onClick={() => onPageChange('catalog')}
           >
             <span className="nav-ico">
-              <svg viewBox="0 0 24 24">
-                <path d="M4 4.5h16v15H4z" />
-                <path d="M8 4.5v15M8 9h12M8 14h12" />
-              </svg>
+              <BookOpen size={16} />
             </span>
             Product catalogue
           </button>
@@ -166,10 +162,7 @@ export function Sidebar({
             onClick={() => onPageChange('suppliers')}
           >
             <span className="nav-ico">
-              <svg viewBox="0 0 24 24">
-                <path d="M3.5 20V8l8.5-4 8.5 4v12z" />
-                <path d="M8 20v-5h8v5M8 9.5h.01M12 9.5h.01M16 9.5h.01" />
-              </svg>
+              <Users size={16} />
             </span>
             Suppliers
           </button>
@@ -178,9 +171,7 @@ export function Sidebar({
             onClick={() => onPageChange('integrations')}
           >
             <span className="nav-ico">
-              <svg viewBox="0 0 24 24">
-                <path d="M8 8V4M16 8V4M8 8h8v5a4 4 0 0 1-8 0zM12 17v3" />
-              </svg>
+              <Cpu size={16} />
             </span>
             Integrations
           </button>
@@ -194,15 +185,9 @@ export function Sidebar({
           onClick={() => onPageChange('settings')}
         >
           <span className="nav-ico">
-            <svg viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="3" />
-              <path
-                d="m19.4 15 .1.1 1.3 1-1.5 2.6-1.6-.7a8 8 0 0 1-1.6.9l-.3 1.7h-3l-.3-1.7a8 8 0 0 1-1.6-.9l-1.6.7-1.5-2.6 1.3-1a7 7 0 0 1 0-1.9l-1.3-1 1.5-2.6 1.6.7a8 8 0 0 1 1.6-.9l.3-1.7h3l.3 1.7a8 8 0 0 1 1.6.9l1.6-.7 1.5 2.6-1.3 1a7 7 0 0 1-.1 1.8z"
-                transform="translate(-1 -1) scale(1.08)"
-              />
-            </svg>
+            <Settings size={16} />
           </span>
-          Settings & rules
+          Settings &amp; rules
         </button>
 
         <div className="profile">
@@ -218,7 +203,7 @@ export function Sidebar({
               title="Sign out"
               aria-label="Sign out"
             >
-              ⎋
+              <LogOut size={14} />
             </button>
           )}
         </div>

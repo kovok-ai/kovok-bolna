@@ -168,34 +168,64 @@ async function main() {
     },
   });
 
-  // 6. Seed Project Sites
-  await prisma.projectSite.upsert({
-    where: { id: '44444444-4444-4444-4444-444444444441' },
+  // 6. Seed Projects and Project Sites
+  const defaultProject = await prisma.project.upsert({
+    where: {
+      workspaceId_code: {
+        workspaceId: workspace.id,
+        code: 'DLF-PH5',
+      },
+    },
     update: {},
+    create: {
+      id: '44444444-4444-4444-4444-444444444440',
+      workspaceId: workspace.id,
+      name: 'DLF Phase V Commercial Towers',
+      code: 'DLF-PH5',
+      description: 'Multi-tower commercial development, Golf Course Road, Gurugram',
+      status: 'ACTIVE',
+    },
+  });
+
+  const siteA = await prisma.projectSite.upsert({
+    where: { id: '44444444-4444-4444-4444-444444444441' },
+    update: {
+      projectId: defaultProject.id,
+      isDefault: true,
+    },
     create: {
       id: '44444444-4444-4444-4444-444444444441',
       workspaceId: workspace.id,
+      projectId: defaultProject.id,
       siteName: 'Site A — Gurugram',
       pinCode: '122018',
       city: 'Gurugram',
       address: 'Plot 42, Sector 29, Gurugram, Haryana',
       gateTimings: '08:00 AM - 07:00 PM',
       unloadingRestrictions: 'Heavy trailer allowed after 10:00 PM; crane required for 32mm rebar.',
+      isDefault: true,
+      isActive: true,
     },
   });
 
   await prisma.projectSite.upsert({
     where: { id: '44444444-4444-4444-4444-444444444442' },
-    update: {},
+    update: {
+      projectId: defaultProject.id,
+      isDefault: false,
+    },
     create: {
       id: '44444444-4444-4444-4444-444444444442',
       workspaceId: workspace.id,
+      projectId: defaultProject.id,
       siteName: 'Dwarka Commercial Project',
       pinCode: '110075',
       city: 'Delhi',
       address: 'Sector 14, Dwarka, New Delhi',
       gateTimings: '09:00 AM - 06:00 PM',
       unloadingRestrictions: 'Covered storage available for 500 cement bags. No overnight parking.',
+      isDefault: false,
+      isActive: true,
     },
   });
 
@@ -222,7 +252,265 @@ async function main() {
     },
   });
 
-  console.log('Development fixtures successfully seeded: Workspace "Concrete & Co.", User "shiwang@concreteandco.in", 2 Sites, 1 Rule Profile.');
+  // 8. Seed Initial Procurement Request: KOV-REQ-0001
+  const req1 = await prisma.procurementRequest.upsert({
+    where: {
+      workspaceId_requestCode: {
+        workspaceId: workspace.id,
+        requestCode: 'KOV-REQ-0001',
+      },
+    },
+    update: {},
+    create: {
+      id: '66666666-6666-6666-6666-666666666661',
+      workspaceId: workspace.id,
+      siteId: siteA.id,
+      requestCode: 'KOV-REQ-0001',
+      materialCategoryId: 'tmt_rebar',
+      canonicalProductId: 'CP-TMT-500D-12MM',
+      targetGrade: 'Fe 500D',
+      targetDiameterMm: 12.00,
+      quantityValue: 20.000,
+      quantityUnit: 'TONNES',
+      derivedCalculations: {
+        nominalMassKgPerMeter: 0.888,
+        singleBarMassKg: 10.656,
+        theoreticalBarsPerTonne: 93.84,
+        totalPiecesEstimated: 1877,
+      },
+      requestStatus: 'MATCHED_VERIFIED',
+      clarificationReason: null,
+      buyerNotes: 'Standard 12m length conforming to IS 1786:2008 Grade Fe 500D. Test certificate mandatory with delivery.',
+      createdByUserId: adminUser.id,
+    },
+  });
+
+  // 9. Seed Quotations for KOV-REQ-0001
+  const quote1 = await prisma.quotation.upsert({
+    where: { id: '77777777-7777-7777-7777-777777777771' },
+    update: {},
+    create: {
+      id: '77777777-7777-7777-7777-777777777771',
+      workspaceId: workspace.id,
+      procurementRequestId: req1.id,
+      supplierId: 'SUP-JSW-ONE',
+      quotationReference: 'QUO-KOV-0001-01',
+      source: 'VOICE_AGENT',
+      materialSpecification: 'TMT Steel Fe 500D · 12mm',
+      canonicalProductId: 'CP-TMT-500D-12MM',
+      brand: 'JSW Neosteel',
+      grade: 'Fe 500D',
+      diameterMm: 12.00,
+      quantityValue: 20.000,
+      quantityUnit: 'TONNES',
+      quotedBaseRate: 52000.00,
+      gstRate: 18.00,
+      gstType: 'CGST_SGST',
+      freightCharges: 14000.00,
+      unloadingCharges: 3500.00,
+      otherCharges: 0.00,
+      totalDeliveredAmount: 1244700.00, // (52000*20)*1.18 + 14000 + 3500 = 12,27,200 + 17500 = 12,44,700
+      leadTimeDays: 2,
+      deliveryEta: 'Tomorrow, 9:00 AM',
+      paymentTerms: 'Direct Supplier Billing / 30 Days Net',
+      validityDays: 3,
+      status: 'PENDING_REVIEW',
+      isComparable: true,
+      reviewNotes: 'Verified dealer direct dispatch. Mill test certificate included.',
+    },
+  });
+
+  await prisma.quotation.upsert({
+    where: { id: '77777777-7777-7777-7777-777777777772' },
+    update: {},
+    create: {
+      id: '77777777-7777-7777-7777-777777777772',
+      workspaceId: workspace.id,
+      procurementRequestId: req1.id,
+      supplierId: 'SUP-TATA-DEALER-NCR',
+      quotationReference: 'QUO-KOV-0001-02',
+      source: 'VOICE_AGENT',
+      materialSpecification: 'TMT Steel Fe 500D · 12mm',
+      canonicalProductId: 'CP-TMT-500D-12MM',
+      brand: 'Tata Tiscon',
+      grade: 'Fe 500D',
+      diameterMm: 12.00,
+      quantityValue: 20.000,
+      quantityUnit: 'TONNES',
+      quotedBaseRate: 53500.00,
+      gstRate: 18.00,
+      gstType: 'CGST_SGST',
+      freightCharges: 16000.00,
+      unloadingCharges: 4000.00,
+      otherCharges: 0.00,
+      totalDeliveredAmount: 1282600.00, // (53500*20)*1.18 + 20000 = 12,62,600 + 20000 = 12,82,600
+      leadTimeDays: 3,
+      deliveryEta: 'In 3 business days',
+      paymentTerms: 'Advance RTGS / Authorized Dealership',
+      validityDays: 2,
+      status: 'PENDING_REVIEW',
+      isComparable: true,
+      reviewNotes: 'Authorized primary distributor stock in Naraina Mandi.',
+    },
+  });
+
+  await prisma.quotation.upsert({
+    where: { id: '77777777-7777-7777-7777-777777777773' },
+    update: {},
+    create: {
+      id: '77777777-7777-7777-7777-777777777773',
+      workspaceId: workspace.id,
+      procurementRequestId: req1.id,
+      supplierId: 'SUP-INFRA-MKT',
+      quotationReference: 'QUO-KOV-0001-03',
+      source: 'VOICE_AGENT',
+      materialSpecification: 'TMT Steel Fe 500D · 12mm',
+      canonicalProductId: 'CP-TMT-500D-12MM',
+      brand: 'Secondary Rolling Brand',
+      grade: 'Fe 500D',
+      diameterMm: 12.00,
+      quantityValue: 20.000,
+      quantityUnit: 'TONNES',
+      quotedBaseRate: 51200.00,
+      gstRate: 18.00,
+      gstType: 'CGST_SGST',
+      freightCharges: 0.00,
+      unloadingCharges: 0.00,
+      otherCharges: 0.00,
+      totalDeliveredAmount: 1208320.00,
+      leadTimeDays: 1,
+      deliveryEta: 'Same day dispatch',
+      paymentTerms: 'Immediate Payment Required',
+      validityDays: 1,
+      status: 'PENDING_REVIEW',
+      isComparable: false,
+      missingTerms: ['freightCharges', 'unloadingCharges'],
+      reviewNotes: 'Supplier has not confirmed freight and unloading to Gurugram site. Delivered total is incomplete.',
+    },
+  });
+
+  // 10. Seed an initial Purchase Order PO-0261
+  const approval = await prisma.approval.upsert({
+    where: { id: '88888888-8888-8888-8888-888888888881' },
+    update: {},
+    create: {
+      id: '88888888-8888-8888-8888-888888888881',
+      workspaceId: workspace.id,
+      requestCode: 'KOV-REQ-0000',
+      approvedByUserId: adminUser.id,
+      totalApprovedQuantity: 20.000,
+      quantityUnit: 'TONNES',
+      totalApprovedAmount: 1012000.00,
+      approvedSpecifications: {
+        materialSpecification: 'TMT Steel Fe 550D · 12mm',
+        grade: 'Fe 550D',
+        diameterMm: 12.00,
+      },
+      approvalStatus: 'APPROVED',
+    },
+  });
+
+  const allocation = await prisma.approvalAllocation.upsert({
+    where: { id: '88888888-8888-8888-8888-888888888882' },
+    update: {},
+    create: {
+      id: '88888888-8888-8888-8888-888888888882',
+      approvalId: approval.id,
+      workspaceId: workspace.id,
+      quotationReference: 'QUO-KOV-0000-01',
+      supplierName: 'Shakti Steel & Co.',
+      allocatedQuantity: 20.000,
+      allocatedPayableAmount: 1012000.00,
+      allocatedTermsSnapshot: {
+        specification: 'TMT Steel Fe 550D · 12 mm',
+        brand: 'JSW Neosteel',
+        grade: 'Fe 550D',
+        quantityValue: 20,
+        quantityUnit: 'tonnes',
+        baseRate: 42000,
+        gstRate: 18,
+        freightCharges: 14000,
+        unloadingCharges: 3500,
+        totalDeliveredAmount: 1012000,
+        deliverySite: { siteName: 'Site A — Gurugram', city: 'Gurugram', pinCode: '122018' },
+      },
+    },
+  });
+
+  const po = await prisma.purchaseOrder.upsert({
+    where: {
+      workspaceId_poNumber: {
+        workspaceId: workspace.id,
+        poNumber: 'PO-0261',
+      },
+    },
+    update: {},
+    create: {
+      id: '88888888-8888-8888-8888-888888888883',
+      workspaceId: workspace.id,
+      poNumber: 'PO-0261',
+      approvalAllocationId: allocation.id,
+      idempotencyKey: 'PO-ALLOC-88888888-8888-8888-8888-888888888882',
+      approvedTermsSnapshot: allocation.allocatedTermsSnapshot as any,
+      consistencyChecksum: 'a7b9c4d8e2f109876543210fedcba9876543210abcdef1234567890abcdef12',
+      poStatus: 'CONFIRMED',
+    },
+  });
+
+  // Seed Delivery Milestones for PO-0261
+  await prisma.deliveryMilestone.upsert({
+    where: { id: '99999999-9999-9999-9999-999999999991' },
+    update: {},
+    create: {
+      id: '99999999-9999-9999-9999-999999999991',
+      workspaceId: workspace.id,
+      purchaseOrderId: po.id,
+      milestoneCode: 'MS-CONFIRMED',
+      milestoneTitle: 'Purchase Order Issued & Supplier Confirmed',
+      milestoneStatus: 'ACHIEVED',
+      actualDate: new Date(),
+      quantityDelivered: 20.000,
+      unit: 'TONNES',
+      notes: 'Buyer approval confirmed under rule profile threshold. Supplier confirmed rolling allocation.',
+      recordedByUserId: adminUser.id,
+    },
+  });
+
+  await prisma.deliveryMilestone.upsert({
+    where: { id: '99999999-9999-9999-9999-999999999992' },
+    update: {},
+    create: {
+      id: '99999999-9999-9999-9999-999999999992',
+      workspaceId: workspace.id,
+      purchaseOrderId: po.id,
+      milestoneCode: 'MS-DISPATCH',
+      milestoneTitle: 'Supplier Yard Dispatch',
+      milestoneStatus: 'PENDING',
+      notes: 'Vehicle dispatch scheduled from regional stockyard.',
+      recordedByUserId: adminUser.id,
+    },
+  });
+
+  // 11. Seed Open Exceptions
+  await prisma.procurementException.upsert({
+    where: { id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' },
+    update: {},
+    create: {
+      id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+      workspaceId: workspace.id,
+      exceptionCode: 'EX-001',
+      exceptionType: 'DELAYED_DELIVERY',
+      severity: 'HIGH',
+      status: 'OPEN',
+      title: 'Supplier rolling cycle delay notice',
+      description: 'Northline Metals reported a 24-hour maintenance shift in rolling cycle. Dispatch shifted from Oct 31 to Nov 1.',
+      relatedEntityType: 'PURCHASE_ORDER',
+      relatedCode: 'PO-0261',
+      assignedUserId: adminUser.id,
+    },
+  });
+
+  console.log('Operational release candidate fixtures initialized: Project, Requests, Quotes, PO-0261, Milestones, Exceptions.');
 }
 
 main()

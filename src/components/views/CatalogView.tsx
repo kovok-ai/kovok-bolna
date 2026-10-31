@@ -1,6 +1,16 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import {
+  BookOpen,
+  Search,
+  Plus,
+  X,
+  ArrowRight,
+  ShieldCheck,
+  AlertCircle,
+  FileSpreadsheet,
+} from 'lucide-react';
 import { getProductVisualAsset } from '@/lib/catalogue/product-images';
 
 interface CanonicalProductSummary {
@@ -371,14 +381,19 @@ export function CatalogView({ onAddProduct, onImport, onInitiateRequest }: Catal
                       padding: '10px 14px',
                       borderTop: '1px solid #334155',
                       display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
+                      flexDirection: 'column',
+                      gap: '4px',
                       fontSize: '10.5px',
                       color: '#94a3b8',
                     }}
                   >
-                    <span><strong>Source:</strong> {visual.attribution}</span>
-                    <span style={{ color: '#cbd5e1' }}><strong>Licensing:</strong> {visual.licensing}</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span><strong>Source:</strong> {visual.attribution}</span>
+                      <span style={{ color: '#cbd5e1' }}><strong>Licensing:</strong> {visual.licensing}</span>
+                    </div>
+                    <div style={{ color: '#e2e8f0', fontStyle: 'italic', fontSize: '10px' }}>
+                      Representative illustration only &middot; Conforming to BIS geometric profile. Not product photograph or certification evidence.
+                    </div>
                   </div>
                 </div>
 

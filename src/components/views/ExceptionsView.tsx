@@ -1,14 +1,60 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  RefreshCw,
+  Plus,
+  X,
+  FileText,
+  ShieldAlert,
+} from 'lucide-react';
+
+interface ExceptionItem {
+  id: string;
+  exceptionCode: string;
+  exceptionType: string;
+  severity: string;
+  status: string;
+  title: string;
+  description: string;
+  relatedEntityType: string | null;
+  relatedCode: string | null;
+  resolutionAction: string | null;
+  resolutionNotes: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+  assignedUser?: { name: string } | null;
+  resolvedByUser?: { name: string } | null;
+}
 
 interface ExceptionsViewProps {
   onReviewRecovery?: (code: string) => void;
 }
 
 export function ExceptionsView({ onReviewRecovery }: ExceptionsViewProps) {
-  const [filter, setFilter] = useState('All open');
-  const [selectedException, setSelectedException] = useState<any | null>(null);
+  const [exceptions, setExceptions] = useState<ExceptionItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('ALL');
+  const [selectedException, setSelectedException] = useState<ExceptionItem | null>(null);
+  const [isResolveModalOpen, setIsResolveModalOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+  // Resolve form
+  const [resolutionAction, setResolutionAction] = useState('Alternative Vendor Sourcing');
+  const [resolutionNotes, setResolutionNotes] = useState('');
+  const [isResolving, setIsResolving] = useState(false);
+
+  // Create form
+  const [newType, setNewType] = useState('SHORT_SUPPLY');
+  const [newSeverity, setNewSeverity] = useState('HIGH');
+  const [newTitle, setNewTitle] = useState('');
+  const [newDesc, setNewDesc] = useState('');
+  const [newRelatedCode, setNewRelatedCode] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
+
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -16,55 +62,110 @@ export function ExceptionsView({ onReviewRecovery }: ExceptionsViewProps) {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const [exceptions, setExceptions] = useState([
-    {
-      code: 'EX-008',
-      type: 'Supplier shortfall',
-      related: 'PO-0259 · TMT Steel Fe 500D 16mm',
-      impact: '8 tonnes not confirmed by Northline Metals due to rolling cycle shift',
-      next: 'Alternative vendor sourcing',
-      state: 'Open',
-      color: 'amber',
-      options: ['Contact Shakti Steel & Co. for immediate 8 MT dispatch', 'Split order: Take 4 MT now, 4 MT from next rolling cycle', 'Cancel shortfall and close PO'],
-    },
-    {
-      code: 'EX-007',
-      type: 'ETA changed',
-      related: 'PO-0260 · Cement PPC 50kg',
-      impact: 'Trailer transport breakdown moved delivery by 4 hours to 8:30 PM',
-      next: 'Site night unloading clearance',
-      state: 'Open',
-      color: 'amber',
-      options: ['Authorize night unloading with site lighting clearance', 'Reschedule delivery to tomorrow 7:00 AM', 'Re-route truck to Dwarka staging yard'],
-    },
-    {
-      code: 'EX-006',
-      type: 'Incomplete quote',
-      related: 'KOV-REQ-0001 · TMT Steel',
-      impact: 'Unloading charges and crane availability missing from Metro Build Supply',
-      next: 'Supplier callback queued',
-      state: 'In progress',
-      color: 'blue',
-      options: ['Trigger automated Sarvam voice agent callback', 'Manually assign site crane team', 'Disqualify quote as non-responsive'],
-    },
-  ]);
+  const fetchExceptions = () => {
+    setLoading(true);
+    fetch('/api/procurement/exceptions')
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to load exceptions');
+        return res.json();
+      })
+      .then((data) => {
+        if (data?.exceptions) {
+          setExceptions(data.exceptions);
+        }
+      })
+      .catch((err) => {
+        console.error('Error fetching exceptions:', err);
+        showToast('Error loading procurement exceptions');
+      })
+      .finally(() => setLoading(false));
+  };
 
-  const filtered = exceptions.filter((ex) => {
-    if (filter === 'All open') return ex.state === 'Open' || ex.state === 'In progress';
-    if (filter === 'High impact') return ex.type.includes('shortfall') || ex.type.includes('Shortfall');
+  useEffect(() => {
+    fetchExceptions();
+  }, []);
+
+  const handleResolve = async () => {
+    if (!selectedException) return;
+    if (!resolutionAction.trim() || !resolutionNotes.trim()) {
+      showToast('Resolution action and detailed audit notes are strictly required.');
+      return;
+    }
+
+    setIsResolving(true);
+    try {
+      const res = await fetch(`/api/procurement/exceptions/${selectedException.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'RESOLVED',
+          resolutionAction,
+          resolutionNotes,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to resolve exception');
+
+      showToast(`Exception ${selectedException.exceptionCode} resolved. Audit log updated.`);
+      setIsResolveModalOpen(false);
+      setSelectedException(null);
+      setResolutionNotes('');
+      fetchExceptions();
+      if (onReviewRecovery) onReviewRecovery(selectedException.exceptionCode);
+    } catch (err: any) {
+      showToast(`Error: ${err.message}`);
+    } finally {
+      setIsResolving(false);
+    }
+  };
+
+  const handleCreate = async () => {
+    if (!newTitle.trim() || !newDesc.trim()) {
+      showToast('Title and description are required.');
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      const res = await fetch('/api/procurement/exceptions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          exceptionType: newType,
+          severity: newSeverity,
+          title: newTitle.trim(),
+          description: newDesc.trim(),
+          relatedCode: newRelatedCode.trim() || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create exception');
+
+      showToast(`Exception ${data.exception.exceptionCode} logged.`);
+      setIsCreateModalOpen(false);
+      setNewTitle('');
+      setNewDesc('');
+      setNewRelatedCode('');
+      fetchExceptions();
+    } catch (err: any) {
+      showToast(`Error: ${err.message}`);
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const openCount = exceptions.filter((e) => e.status === 'OPEN' || e.status === 'IN_PROGRESS').length;
+  const criticalCount = exceptions.filter((e) => e.severity === 'CRITICAL' && e.status !== 'RESOLVED').length;
+
+  const filtered = exceptions.filter((e) => {
+    if (filter === 'ALL') return true;
+    if (filter === 'OPEN') return e.status === 'OPEN' || e.status === 'IN_PROGRESS';
+    if (filter === 'RESOLVED') return e.status === 'RESOLVED';
+    if (filter === 'HIGH') return e.severity === 'HIGH' || e.severity === 'CRITICAL';
     return true;
   });
-
-  const handleResolve = (code: string, chosenOption: string) => {
-    setExceptions(
-      exceptions.map((ex) =>
-        ex.code === code ? { ...ex, state: 'Resolved', color: 'green', next: 'Closed with evidence' } : ex
-      )
-    );
-    setSelectedException(null);
-    showToast(`Exception ${code} resolved: ${chosenOption}. Audit log updated.`);
-    if (onReviewRecovery) onReviewRecovery(code);
-  };
 
   return (
     <div>
@@ -80,47 +181,39 @@ export function ExceptionsView({ onReviewRecovery }: ExceptionsViewProps) {
         <div>
           <h1>Exceptions &amp; Delivery Recovery</h1>
           <p>
-            {exceptions.filter((e) => e.state === 'Open').length} open exceptions requiring active buyer authorization
+            {openCount} Active procurement issues requiring buyer resolution and auditable record
           </p>
         </div>
         <div className="head-actions">
-          <button
-            className="btn btn-secondary"
-            onClick={() => {
-              setFilter('High impact');
-              showToast('Filtering for high-impact shortfalls and delivery delays.');
-            }}
-          >
-            Review Priority Queue
+          <button className="btn btn-secondary" onClick={fetchExceptions} title="Refresh exceptions">
+            <RefreshCw size={13} style={{ marginRight: '6px' }} /> Refresh
+          </button>
+          <button className="btn btn-primary" onClick={() => setIsCreateModalOpen(true)}>
+            <Plus size={14} style={{ marginRight: '4px' }} /> Log Exception
           </button>
         </div>
       </div>
 
       {/* Metric Counters */}
-      <div className="grid metrics">
+      <div className="grid metrics" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', marginBottom: '20px' }}>
         <div className="metric">
           <div className="metric-top">Open exceptions</div>
-          <strong style={{ color: '#b45309' }}>
-            {exceptions.filter((e) => e.state === 'Open').length}
+          <strong>{loading ? '...' : openCount}</strong>
+          <small>{openCount === 0 ? 'All site issues reconciled' : 'Action required'}</small>
+        </div>
+        <div className="metric">
+          <div className="metric-top">Critical shortfalls</div>
+          <strong style={{ color: criticalCount > 0 ? '#b91c1c' : '#15803d' }}>
+            {loading ? '...' : criticalCount}
           </strong>
-          <small>Require buyer decision</small>
+          <small>Rolling cycle / stock shortfalls</small>
         </div>
         <div className="metric">
-          <div className="metric-top">Awaiting supplier</div>
-          <strong>1</strong>
-          <small>Vendor callback queued</small>
-        </div>
-        <div className="metric">
-          <div className="metric-top">Awaiting buyer</div>
-          <strong>1</strong>
-          <small>Shortfall recovery open</small>
-        </div>
-        <div className="metric">
-          <div className="metric-top">Resolved today</div>
+          <div className="metric-top">Resolved with audit</div>
           <strong style={{ color: '#15803d' }}>
-            {exceptions.filter((e) => e.state === 'Resolved').length + 4}
+            {loading ? '...' : exceptions.filter((e) => e.status === 'RESOLVED').length}
           </strong>
-          <small>Closed with evidence</small>
+          <small>Documented recovery decisions</small>
         </div>
       </div>
 
@@ -128,146 +221,339 @@ export function ExceptionsView({ onReviewRecovery }: ExceptionsViewProps) {
       <section className="panel">
         <div className="panel-head">
           <div>
-            <h2>Active Recovery Queue</h2>
-            <p>Every case requires verified evidence before closure. No premature resolution.</p>
+            <h2>Exception Registry ({filtered.length})</h2>
+            <p>Auditable resolution tracking for quality, logistics, and pricing variances</p>
           </div>
-          <select
-            className="filter"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            aria-label="Filter exceptions"
-          >
-            <option>All open</option>
-            <option>High impact</option>
-          </select>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <select
+              className="filter"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              aria-label="Filter exceptions"
+            >
+              <option value="ALL">All records ({exceptions.length})</option>
+              <option value="OPEN">Open &amp; In Progress ({openCount})</option>
+              <option value="HIGH">High &amp; Critical Severity</option>
+              <option value="RESOLVED">Resolved</option>
+            </select>
+          </div>
         </div>
 
         <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Exception</th>
-                <th>Type</th>
-                <th>Related Record</th>
-                <th>Known Impact</th>
-                <th>Next Action</th>
-                <th>State</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((ex) => (
-                <tr
-                  key={ex.code}
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => setSelectedException(ex)}
-                >
-                  <td>
-                    <strong style={{ color: '#1e40af' }}>{ex.code}</strong>
-                  </td>
-                  <td>
-                    <strong>{ex.type}</strong>
-                  </td>
-                  <td>{ex.related}</td>
-                  <td>{ex.impact}</td>
-                  <td>
-                    <span style={{ fontSize: '11.5px', color: '#475569' }}>{ex.next}</span>
-                  </td>
-                  <td>
-                    <span className={`pill ${ex.color}`}>
-                      <span className="dot"></span>
-                      {ex.state}
-                    </span>
-                  </td>
-                  <td style={{ textAlign: 'right' }}>
-                    <button
-                      className="row-action"
-                      style={{ color: '#1e40af', fontWeight: 600 }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedException(ex);
+          {loading ? (
+            <div style={{ padding: '36px', textAlign: 'center', color: '#64748b' }}>Loading exceptions...</div>
+          ) : exceptions.length === 0 ? (
+            <div style={{ padding: '36px', textAlign: 'center', color: '#64748b' }}>
+              No exceptions currently open. When delivery variances, rolling shortfalls, or damaged materials are logged, they will appear here.
+            </div>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Issue &amp; Related Record</th>
+                  <th>Severity</th>
+                  <th>Description</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((e) => {
+                  const isResolved = e.status === 'RESOLVED';
+                  const isHigh = e.severity === 'HIGH' || e.severity === 'CRITICAL';
+
+                  return (
+                    <tr
+                      key={e.id}
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => {
+                        setSelectedException(e);
+                        setIsResolveModalOpen(true);
                       }}
                     >
-                      Resolve →
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                      <td>
+                        <strong style={{ color: '#1e40af' }}>{e.exceptionCode}</strong>
+                        <span className="sub">
+                          {new Date(e.createdAt).toLocaleDateString('en-IN', {
+                            day: 'numeric',
+                            month: 'short',
+                          })}
+                        </span>
+                      </td>
+                      <td>
+                        <strong>{e.title}</strong>
+                        <span className="sub">
+                          {e.exceptionType.replace(/_/g, ' ')} &middot; Ref: {e.relatedCode || 'Unlinked'}
+                        </span>
+                      </td>
+                      <td>
+                        <span
+                          className={`pill ${isHigh ? 'red' : 'amber'}`}
+                          style={{ fontSize: '10px' }}
+                        >
+                          {e.severity}
+                        </span>
+                      </td>
+                      <td style={{ maxWidth: '340px' }}>
+                        <span style={{ fontSize: '12px', color: '#334155', lineHeight: 1.4, display: 'block' }}>
+                          {e.description}
+                        </span>
+                        {isResolved && e.resolutionAction && (
+                          <span style={{ fontSize: '11px', color: '#15803d', marginTop: '2px', display: 'block' }}>
+                            Resolved: {e.resolutionAction}
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        <span
+                          className={`pill ${isResolved ? 'green' : isHigh ? 'red' : 'amber'}`}
+                          style={{ fontSize: '10px' }}
+                        >
+                          <span className="dot"></span>
+                          {e.status}
+                        </span>
+                      </td>
+                      <td>
+                        <button
+                          className="row-action"
+                          onClick={(evt) => {
+                            evt.stopPropagation();
+                            setSelectedException(e);
+                            setIsResolveModalOpen(true);
+                          }}
+                        >
+                          {isResolved ? 'Inspect Audit →' : 'Resolve Exception →'}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
       </section>
 
-      {/* Exception Resolution Modal */}
-      {selectedException && (
-        <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && setSelectedException(null)}>
+      {/* Resolve Exception Modal */}
+      {isResolveModalOpen && selectedException && (
+        <div
+          className="modal-backdrop"
+          onClick={(e) => e.target === e.currentTarget && !isResolving && setIsResolveModalOpen(false)}
+        >
           <div className="modal" style={{ maxWidth: '580px' }}>
             <div className="modal-head">
               <div>
-                <div className="eyebrow">EXCEPTION RECOVERY DECISION · {selectedException.code}</div>
-                <h2>{selectedException.type}</h2>
-                <p>{selectedException.related}</p>
+                <div className="eyebrow">AUDITABLE RESOLUTION WORKFLOW</div>
+                <h2>{selectedException.exceptionCode} &middot; {selectedException.title}</h2>
+                <p>Related: {selectedException.relatedCode || 'General'} &middot; Type: {selectedException.exceptionType.replace(/_/g, ' ')}</p>
               </div>
-              <button className="icon-btn" onClick={() => setSelectedException(null)}>×</button>
+              <button className="icon-btn" onClick={() => !isResolving && setIsResolveModalOpen(false)}>
+                <X size={16} />
+              </button>
             </div>
-            <div style={{ padding: '16px' }}>
+
+            <div className="wizard-main">
               <div
                 style={{
-                  background: '#fef2f2',
-                  border: '1px solid #fecaca',
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
                   borderRadius: '8px',
-                  padding: '12px',
-                  fontSize: '12px',
-                  color: '#991b1b',
+                  padding: '12px 14px',
                   marginBottom: '16px',
-                  lineHeight: 1.5,
+                  fontSize: '12.5px',
+                  lineHeight: 1.45,
                 }}
               >
-                <strong>Operational Impact:</strong> {selectedException.impact}
+                <strong>Issue Description:</strong>
+                <p style={{ margin: '4px 0 0', color: '#334155' }}>{selectedException.description}</p>
               </div>
 
-              <div>
-                <strong style={{ display: 'block', fontSize: '12px', color: '#0f172a', marginBottom: '8px' }}>
-                  Select Recovery Action:
-                </strong>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {selectedException.options?.map((opt: string, i: number) => (
-                    <button
-                      key={i}
-                      className="panel"
-                      style={{
-                        padding: '12px 14px',
-                        textAlign: 'left',
-                        cursor: 'pointer',
-                        fontSize: '12px',
-                        color: '#1e293b',
-                        background: '#ffffff',
-                        border: '1px solid #cbd5e1',
-                        transition: 'border-color 0.15s, background 0.15s',
-                        borderRadius: '6px',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.borderColor = '#3b82f6';
-                        e.currentTarget.style.background = '#eff6ff';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = '#cbd5e1';
-                        e.currentTarget.style.background = '#ffffff';
-                      }}
-                      onClick={() => handleResolve(selectedException.code, opt)}
+              {selectedException.status === 'RESOLVED' ? (
+                <div
+                  style={{
+                    background: '#f0fdf4',
+                    border: '1px solid #bbf7d0',
+                    borderRadius: '8px',
+                    padding: '14px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                    <CheckCircle2 size={16} className="text-green-600" />
+                    <strong style={{ color: '#15803d', fontSize: '13px' }}>Resolved &amp; Committed to Audit Trail</strong>
+                  </div>
+                  <div className="kv">
+                    <span>Resolution Action</span>
+                    <strong>{selectedException.resolutionAction}</strong>
+                  </div>
+                  <div className="kv">
+                    <span>Audit Notes</span>
+                    <span>{selectedException.resolutionNotes}</span>
+                  </div>
+                  <div className="kv">
+                    <span>Resolved Date</span>
+                    <span>{selectedException.resolvedAt ? new Date(selectedException.resolvedAt).toLocaleString('en-IN') : 'Completed'}</span>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="field" style={{ marginBottom: '14px' }}>
+                    <label>Resolution Action Strategy</label>
+                    <select
+                      value={resolutionAction}
+                      onChange={(e) => setResolutionAction(e.target.value)}
+                      disabled={isResolving}
+                      aria-label="Resolution Action Strategy"
                     >
-                      <strong style={{ display: 'block', color: '#1e40af', marginBottom: '2px' }}>
-                        Option {i + 1}:
-                      </strong>
-                      {opt}
-                    </button>
-                  ))}
+                      <option>Alternative Vendor Sourcing</option>
+                      <option>Split Delivery: Accept partial now, balance next rolling</option>
+                      <option>Authorize Night Site Offloading Clearance</option>
+                      <option>Disqualify Quote as Non-Responsive</option>
+                      <option>Shortfall Cancellation &amp; Close PO</option>
+                      <option>Re-rate Commercial Invoice to Stated Quotation</option>
+                    </select>
+                  </div>
+
+                  <div className="field" style={{ marginBottom: '14px' }}>
+                    <label>Auditable Resolution Note &amp; Justification (Required)</label>
+                    <textarea
+                      placeholder="e.g. Authorized emergency dispatch of 8 MT Fe 500D from Shakti Steel stockyard to prevent pour delay."
+                      value={resolutionNotes}
+                      onChange={(e) => setResolutionNotes(e.target.value)}
+                      disabled={isResolving}
+                      rows={3}
+                    />
+                    <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
+                      Strict Invariant: System will reject resolution without documented reason and actor identity.
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="wizard-footer">
+              <button
+                className="btn btn-secondary"
+                disabled={isResolving}
+                onClick={() => setIsResolveModalOpen(false)}
+              >
+                Close
+              </button>
+              {selectedException.status !== 'RESOLVED' && (
+                <button
+                  className="btn btn-primary"
+                  disabled={isResolving}
+                  onClick={handleResolve}
+                >
+                  {isResolving ? 'Committing Resolution...' : 'Commit Resolution & Update Audit'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Log New Exception Modal */}
+      {isCreateModalOpen && (
+        <div
+          className="modal-backdrop"
+          onClick={(e) => e.target === e.currentTarget && !isCreating && setIsCreateModalOpen(false)}
+        >
+          <div className="modal" style={{ maxWidth: '540px' }}>
+            <div className="modal-head">
+              <div>
+                <div className="eyebrow">NEW PROCUREMENT EXCEPTION</div>
+                <h2>Log Procurement Issue</h2>
+                <p>Record a shortfall, specification variance, or delivery delay</p>
+              </div>
+              <button className="icon-btn" onClick={() => !isCreating && setIsCreateModalOpen(false)}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="wizard-main">
+              <div className="form-grid" style={{ marginBottom: '14px' }}>
+                <div className="field">
+                  <label>Exception Type</label>
+                  <select
+                    value={newType}
+                    onChange={(e) => setNewType(e.target.value)}
+                    disabled={isCreating}
+                    aria-label="Exception Type"
+                  >
+                    <option value="SHORT_SUPPLY">Short Supply</option>
+                    <option value="DELAYED_DELIVERY">Delayed Delivery</option>
+                    <option value="SPEC_MISMATCH">Specification Mismatch</option>
+                    <option value="DAMAGED_MATERIAL">Damaged Material</option>
+                    <option value="MISSING_DOCUMENTATION">Missing Documentation (MTC)</option>
+                    <option value="PRICING_DISCREPANCY">Pricing Discrepancy</option>
+                    <option value="SUPPLIER_CANCELLATION">Supplier Cancellation</option>
+                    <option value="OTHER">Other Issue</option>
+                  </select>
+                </div>
+
+                <div className="field">
+                  <label>Severity</label>
+                  <select
+                    value={newSeverity}
+                    onChange={(e) => setNewSeverity(e.target.value)}
+                    disabled={isCreating}
+                    aria-label="Severity"
+                  >
+                    <option value="LOW">Low</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="HIGH">High</option>
+                    <option value="CRITICAL">Critical</option>
+                  </select>
                 </div>
               </div>
+
+              <div className="field" style={{ marginBottom: '14px' }}>
+                <label>Related Requisition or PO Number (Optional)</label>
+                <input
+                  placeholder="e.g. PO-0261 or KOV-REQ-0001"
+                  value={newRelatedCode}
+                  onChange={(e) => setNewRelatedCode(e.target.value)}
+                  disabled={isCreating}
+                />
+              </div>
+
+              <div className="field" style={{ marginBottom: '14px' }}>
+                <label>Issue Title</label>
+                <input
+                  placeholder="e.g. 8 tonnes rolling cycle delay from mill"
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  disabled={isCreating}
+                />
+              </div>
+
+              <div className="field" style={{ marginBottom: '14px' }}>
+                <label>Detailed Description</label>
+                <textarea
+                  placeholder="Provide precise details of the material shortfall, vehicle problem, or certificate mismatch..."
+                  value={newDesc}
+                  onChange={(e) => setNewDesc(e.target.value)}
+                  disabled={isCreating}
+                  rows={3}
+                />
+              </div>
             </div>
+
             <div className="wizard-footer">
-              <button className="btn btn-secondary" onClick={() => setSelectedException(null)}>
-                Close
+              <button
+                className="btn btn-secondary"
+                disabled={isCreating}
+                onClick={() => setIsCreateModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                disabled={isCreating}
+                onClick={handleCreate}
+              >
+                {isCreating ? 'Logging...' : 'Submit Exception'}
               </button>
             </div>
           </div>

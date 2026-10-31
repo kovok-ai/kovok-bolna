@@ -29,6 +29,7 @@ model Workspace {
   // Relations
   memberships      WorkspaceMembership[]
   roles            WorkspaceRole[]
+  projects         Project[]
   sites            ProjectSite[]
   ruleProfiles     WorkspaceRuleProfile[]
   approvals        Approval[]
@@ -38,13 +39,36 @@ model Workspace {
   sessions         Session[]
   requests         ProcurementRequest[]
   requestCounter   WorkspaceRequestCounter?
+  supplierCalls    SupplierVoiceCall[]
+  quotations       Quotation[]
+  milestones       DeliveryMilestone[]
+  exceptions       ProcurementException[]
 
   @@map("workspaces")
+}
+
+model Project {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @db.Uuid
+  name        String   @db.VarChar(255)
+  code        String   @db.VarChar(64)
+  description String?  @db.Text
+  status      String   @default("ACTIVE") @db.VarChar(32) // 'ACTIVE', 'COMPLETED', 'ARCHIVED'
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sites     ProjectSite[]
+
+  @@unique([workspaceId, code])
+  @@index([workspaceId, status])
+  @@map("projects")
 }
 
 model ProjectSite {
   id                     String    @id @default(uuid()) @db.Uuid
   workspaceId            String    @db.Uuid
+  projectId              String?   @db.Uuid
   siteName               String    @db.VarChar(255)
   pinCode                String    @db.VarChar(6)
   city                   String    @db.VarChar(128)
@@ -53,11 +77,13 @@ model ProjectSite {
   contactPhone           String?   @db.VarChar(32)
   gateTimings            String?   @db.VarChar(128)
   unloadingRestrictions String?   @db.Text
+  isDefault              Boolean   @default(false)
   isActive               Boolean   @default(true)
   createdAt              DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt              DateTime  @updatedAt @db.Timestamptz(6)
 
   workspace Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
   requests  ProcurementRequest[]
 
   @@unique([workspaceId, id])
@@ -85,6 +111,10 @@ model User {
   auditLogs           AuditLog[]
   procurementRequests ProcurementRequest[]
   importBatches       ImportBatch[]
+  initiatedCalls      SupplierVoiceCall[]
+  recordedMilestones  DeliveryMilestone[]
+  assignedExceptions  ProcurementException[] @relation("ExceptionAssignee")
+  resolvedExceptions  ProcurementException[] @relation("ExceptionResolver")
 
   @@map("users")
 }
@@ -252,6 +282,7 @@ model PurchaseOrder {
 
   workspace  Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   allocation ApprovalAllocation @relation(fields: [approvalAllocationId], references: [id], onDelete: Restrict)
+  milestones DeliveryMilestone[]
 
   @@unique([workspaceId, poNumber])
   @@unique([workspaceId, idempotencyKey])
@@ -359,6 +390,7 @@ model CanonicalProduct {
   listings            SupplierListing[]
   images              ProductImage[]
   procurementRequests ProcurementRequest[]
+  quotations          Quotation[]
 
   @@index([categoryId, verificationStatus])
   @@map("canonical_products")
@@ -506,7 +538,9 @@ model SupplierOrganization {
   createdAt              DateTime @default(now()) @db.Timestamptz(6)
   updatedAt              DateTime @updatedAt @db.Timestamptz(6)
 
-  listings SupplierListing[]
+  listings   SupplierListing[]
+  calls      SupplierVoiceCall[]
+  quotations Quotation[]
 
   @@map("supplier_organizations")
 }
@@ -659,9 +693,145 @@ model ProcurementRequest {
   createdByUser    User             @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
   materialCategory MaterialCategory @relation(fields: [materialCategoryId], references: [id], onDelete: Restrict)
   canonicalProduct CanonicalProduct? @relation(fields: [canonicalProductId], references: [id], onDelete: Restrict)
+  calls            SupplierVoiceCall[]
+  quotations       Quotation[]
 
   @@unique([workspaceId, requestCode])
   @@index([workspaceId, requestStatus])
   @@index([workspaceId, siteId])
   @@map("procurement_requests")
+}
+
+// -----------------------------------------------------------------------------
+// 14. RELEASE CANDIDATE MODULES: CALLS, QUOTATIONS, DELIVERIES, EXCEPTIONS
+// -----------------------------------------------------------------------------
+
+model SupplierVoiceCall {
+  id                   String    @id @default(uuid()) @db.Uuid
+  workspaceId          String    @db.Uuid
+  procurementRequestId String    @db.Uuid
+  supplierId           String    @db.VarChar(64)
+  initiatedByUserId    String    @db.Uuid
+  sarvamAttemptId      String?   @db.VarChar(128)
+  sarvamInteractionId  String?   @db.VarChar(128)
+  callStatus           String    @default("QUEUED") @db.VarChar(32) // 'QUEUED', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'BUSY', 'NO_ANSWER', 'CANCELLED'
+  supplierPhoneNumber  String    @db.VarChar(32)
+  callbackTokenHash    String    @db.VarChar(64)
+  startedAt            DateTime? @db.Timestamptz(6)
+  completedAt          DateTime? @db.Timestamptz(6)
+  durationSeconds      Int       @default(0)
+  extractedVariables   Json?     // Structured commercial fields collected by agent
+  transcript           Json?     // Call turns / transcript
+  notes                String?   @db.Text
+  createdAt            DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime  @updatedAt @db.Timestamptz(6)
+
+  workspace          Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  procurementRequest ProcurementRequest   @relation(fields: [procurementRequestId], references: [id], onDelete: Cascade)
+  supplier           SupplierOrganization @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  initiatedByUser    User                 @relation(fields: [initiatedByUserId], references: [id], onDelete: Restrict)
+  quotations         Quotation[]
+
+  @@index([workspaceId, callStatus])
+  @@index([procurementRequestId])
+  @@index([supplierId])
+  @@map("supplier_voice_calls")
+}
+
+model Quotation {
+  id                    String    @id @default(uuid()) @db.Uuid
+  workspaceId           String    @db.Uuid
+  procurementRequestId  String    @db.Uuid
+  supplierId            String    @db.VarChar(64)
+  callId                String?   @db.Uuid
+  quotationReference    String    @db.VarChar(64) // e.g. 'QUO-KOV-0001-01'
+  source                String    @default("MANUAL") @db.VarChar(32) // 'VOICE_AGENT', 'MANUAL_ENTRY', 'VENDOR_PORTAL'
+  materialSpecification String    @db.VarChar(255)
+  canonicalProductId    String?   @db.VarChar(64)
+  brand                 String?   @db.VarChar(128)
+  grade                 String?   @db.VarChar(64)
+  diameterMm            Decimal?  @db.Decimal(5, 2)
+  quantityValue         Decimal   @db.Decimal(12, 3)
+  quantityUnit          String    @db.VarChar(32)
+  quotedBaseRate        Decimal   @db.Decimal(14, 2) // Base rate per unit before tax and transport
+  gstRate               Decimal   @default(18.00) @db.Decimal(5, 2) // Tax percentage
+  gstType               String?   @default("CGST_SGST") @db.VarChar(32) // 'CGST_SGST', 'IGST', 'UNSPECIFIED'
+  freightCharges        Decimal   @default(0.00) @db.Decimal(14, 2)
+  unloadingCharges      Decimal   @default(0.00) @db.Decimal(14, 2)
+  otherCharges          Decimal   @default(0.00) @db.Decimal(14, 2)
+  totalDeliveredAmount  Decimal   @db.Decimal(14, 2)
+  leadTimeDays          Int?
+  deliveryEta           String?   @db.VarChar(128)
+  paymentTerms          String?   @db.VarChar(255)
+  validityDays          Int?
+  validityDate          DateTime? @db.Date
+  status                String    @default("PENDING_REVIEW") @db.VarChar(32) // 'PENDING_REVIEW', 'APPROVED', 'REJECTED', 'CLARIFICATION_REQUESTED'
+  isComparable          Boolean   @default(true)
+  missingTerms          Json?     // Array of missing field keys e.g. ["freightCharges", "unloadingCharges"]
+  reviewNotes           String?   @db.Text
+  createdAt             DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime  @updatedAt @db.Timestamptz(6)
+
+  workspace          Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  procurementRequest ProcurementRequest   @relation(fields: [procurementRequestId], references: [id], onDelete: Cascade)
+  supplier           SupplierOrganization @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  call               SupplierVoiceCall?   @relation(fields: [callId], references: [id], onDelete: SetNull)
+  canonicalProduct   CanonicalProduct?    @relation(fields: [canonicalProductId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status])
+  @@index([procurementRequestId])
+  @@index([supplierId])
+  @@map("quotations")
+}
+
+model DeliveryMilestone {
+  id                String    @id @default(uuid()) @db.Uuid
+  workspaceId       String    @db.Uuid
+  purchaseOrderId   String    @db.Uuid
+  milestoneCode     String    @db.VarChar(64) // e.g. 'MS-DISPATCH', 'MS-GATE-ENTRY'
+  milestoneTitle    String    @db.VarChar(128)
+  milestoneStatus   String    @default("PENDING") @db.VarChar(32) // 'PENDING', 'ACHIEVED', 'FLAGGED', 'SKIPPED'
+  targetDate        DateTime? @db.Timestamptz(6)
+  actualDate        DateTime? @db.Timestamptz(6)
+  quantityDelivered Decimal?  @db.Decimal(12, 3)
+  unit              String?   @db.VarChar(32)
+  notes             String?   @db.Text
+  recordedByUserId  String?   @db.Uuid
+  createdAt         DateTime  @default(now()) @db.Timestamptz(6)
+
+  workspace      Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  purchaseOrder  PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  recordedByUser User?         @relation(fields: [recordedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, purchaseOrderId])
+  @@map("delivery_milestones")
+}
+
+model ProcurementException {
+  id                String    @id @default(uuid()) @db.Uuid
+  workspaceId       String    @db.Uuid
+  exceptionCode     String    @db.VarChar(64) // e.g. 'EX-001'
+  exceptionType     String    @db.VarChar(64) // 'SHORT_SUPPLY', 'DELAYED_DELIVERY', 'SUPPLIER_CANCELLATION', 'SPEC_MISMATCH', 'DAMAGED_MATERIAL', 'MISSING_DOCUMENTATION', 'PRICING_DISCREPANCY', 'OTHER'
+  severity          String    @default("MEDIUM") @db.VarChar(32) // 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'
+  status            String    @default("OPEN") @db.VarChar(32) // 'OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'
+  title             String    @db.VarChar(255)
+  description       String    @db.Text
+  relatedEntityType String?   @db.VarChar(64) // 'PROCUREMENT_REQUEST', 'PURCHASE_ORDER', 'QUOTATION', 'DELIVERY_MILESTONE'
+  relatedEntityId   String?   @db.VarChar(128)
+  relatedCode       String?   @db.VarChar(64) // e.g. 'KOV-REQ-0001', 'PO-0261'
+  assignedUserId    String?   @db.Uuid
+  resolutionAction  String?   @db.VarChar(128)
+  resolutionNotes   String?   @db.Text
+  resolvedAt        DateTime? @db.Timestamptz(6)
+  resolvedByUserId  String?   @db.Uuid
+  createdAt         DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(6)
+
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  assignedUser     User?     @relation("ExceptionAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  resolvedByUser   User?     @relation("ExceptionResolver", fields: [resolvedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status, severity])
+  @@index([relatedCode])
+  @@map("procurement_exceptions")
 }

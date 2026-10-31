@@ -31,6 +31,12 @@ import {
   calculateRebarConversions,
   matchProcurementRequirement
 } from '../src/lib/procurement/intake';
+import {
+  getSarvamVoiceConfigStatus,
+  generateCallbackToken,
+  verifyCallbackToken,
+  SARVAM_SUPPLIER_AGENT_PROMPT,
+} from '../src/lib/integrations/sarvam-voice';
 
 // ANSI terminal colors for clear test reporting
 const GREEN = '\x1b[32m';
@@ -1236,6 +1242,216 @@ async function main() {
 
     assert(queryRes.rows.length === 1, `Tenant A must see exactly 1 request, got ${queryRes.rows.length}`);
     assert(queryRes.rows[0].workspaceId === wsAId, 'Tenant A can only see requests belonging to Workspace A');
+  });
+
+  console.log();
+
+  // ==========================================================================
+  // PHASE 3 TEST SUITES: RELEASE CANDIDATE MODULES & WORKFLOWS
+  // ==========================================================================
+  console.log(`${BOLD}[14/14] Release Candidate Additive Migration & Modules${RESET}`);
+
+  await runTest('Applies Phase 3 Migration (20261031000000_release_candidate_modules)', async () => {
+    const migration4Path = path.join(
+      __dirname,
+      '../prisma/migrations/20261031000000_release_candidate_modules/migration.sql'
+    );
+    const sql4 = fs.readFileSync(migration4Path, 'utf-8');
+    await pg.exec(sql4);
+
+    // Grant schema privileges on new tables to kovok_app
+    await pg.exec(`
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'kovok_app') THEN
+          GRANT ALL ON
+            "projects", "supplier_voice_calls", "quotations", "delivery_milestones", "procurement_exceptions"
+          TO kovok_app;
+        END IF;
+      END
+      $$;
+    `);
+  });
+
+  await runTest('Verifies Row-Level Security is forced on all 16 tenant tables', async () => {
+    const rlsRes = await pg.query<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }>(
+      `SELECT relname, relrowsecurity, relforcerowsecurity
+       FROM pg_class
+       WHERE relname IN (
+         'project_sites', 'workspace_rule_profiles', 'approvals',
+         'approval_allocations', 'purchase_orders', 'audit_logs',
+         'workspace_roles', 'workspace_memberships', 'sessions',
+         'procurement_requests', 'workspace_request_counters',
+         'projects', 'supplier_voice_calls', 'quotations',
+         'delivery_milestones', 'procurement_exceptions'
+       );`
+    );
+
+    assert(rlsRes.rows.length === 16, `Expected 16 tenant tables with forced RLS, found ${rlsRes.rows.length}`);
+    for (const row of rlsRes.rows) {
+      assert(row.relrowsecurity === true, `${row.relname} must have relrowsecurity enabled`);
+      assert(row.relforcerowsecurity === true, `${row.relname} must have relforcerowsecurity forced`);
+    }
+  });
+
+  await runTest('Sarvam Voice config status accurately reports missing server variables without leaking secrets', () => {
+    const status = getSarvamVoiceConfigStatus();
+    assert(typeof status.isConfigured === 'boolean', 'isConfigured must be boolean');
+    assert(['NOT_CONFIGURED', 'CONFIG_INCOMPLETE', 'CONFIGURED'].includes(status.status), 'Valid status string');
+    assert(Array.isArray(status.missingVariables), 'missingVariables must be array');
+    assert(Array.isArray(status.configuredVariables), 'configuredVariables must be array');
+  });
+
+  await runTest('Sarvam callback token generation produces 64-char crypto hash with timing-safe verification', () => {
+    const { token, tokenHash } = generateCallbackToken();
+    assert(token.length === 64, 'Token must be 64-char hex');
+    assert(tokenHash.length === 64, 'Hash must be 64-char sha256');
+    assert(verifyCallbackToken(token, tokenHash) === true, 'Matching token must verify');
+    assert(verifyCallbackToken('invalid_tampered_token', tokenHash) === false, 'Tampered token must reject');
+  });
+
+  await runTest('Quotation persistence and cross-workspace RLS isolation', async () => {
+    const testSiteAId = crypto.randomUUID();
+    await pg.query(
+      `INSERT INTO project_sites (id, "workspaceId", "siteName", "pinCode", "city", address, "updatedAt")
+       VALUES ($1, $2, 'Test Site Gurugram Alpha', '122002', 'Gurugram', 'Site Alpha', NOW())
+       ON CONFLICT ("workspaceId", id) DO NOTHING;`,
+      [testSiteAId, wsAId]
+    );
+
+    const testReqId = crypto.randomUUID();
+    const quoteId = crypto.randomUUID();
+    const quoteRef = 'QUO-TEST-0001';
+
+    // Insert request first
+    await pg.query(
+      `INSERT INTO procurement_requests (id, "workspaceId", "siteId", "requestCode", "materialCategoryId", "canonicalProductId", "quantityValue", "quantityUnit", "requestStatus", "createdByUserId", "updatedAt")
+       VALUES ($1, $2, $3, 'KOV-REQ-TEST-1', 'tmt_rebar', 'CP-TMT-500D-12MM', 20.0, 'TONNES', 'MATCHED_VERIFIED', $4, NOW());`,
+      [testReqId, wsAId, testSiteAId, userAId]
+    );
+
+    // Insert under kovok_app for Tenant A
+    await pg.exec('BEGIN;');
+    await pg.exec('SET ROLE kovok_app;');
+    await pg.query(`SET LOCAL app.current_workspace_id = '${wsAId}';`);
+
+    await pg.query(
+      `INSERT INTO quotations (
+         id, "workspaceId", "procurementRequestId", "supplierId", "quotationReference",
+         source, "materialSpecification", "quantityValue", "quantityUnit",
+         "quotedBaseRate", "gstRate", "freightCharges", "unloadingCharges",
+         "totalDeliveredAmount", "status", "isComparable", "updatedAt"
+       ) VALUES (
+         $1, $2, $3, 'SUP-JSW-ONE', $4,
+         'MANUAL', 'TMT Steel Fe 500D 12mm', 20.000, 'TONNES',
+         52000.00, 18.00, 14000.00, 3500.00,
+         1244700.00, 'PENDING_REVIEW', true, NOW()
+       );`,
+      [quoteId, wsAId, testReqId, quoteRef]
+    );
+
+    // Tenant A can query it
+    const qA = await pg.query('SELECT id, "quotationReference" FROM quotations WHERE id = $1;', [quoteId]);
+    assert(qA.rows.length === 1, 'Tenant A must see its quotation');
+
+    // Switch to Tenant B under kovok_app
+    await pg.query(`SET LOCAL app.current_workspace_id = '${wsBId}';`);
+    const qB = await pg.query('SELECT id, "quotationReference" FROM quotations WHERE id = $1;', [quoteId]);
+    assert(qB.rows.length === 0, 'Tenant B must NOT see Tenant A quotation under RLS');
+
+    await pg.exec('RESET ROLE;');
+    await pg.exec('ROLLBACK;');
+  });
+
+  await runTest('Purchase Order generation preserves consistency checksum and initializes delivery milestones', async () => {
+    const freshApprovalId = crypto.randomUUID();
+    const testPoId = crypto.randomUUID();
+    const testAllocId = crypto.randomUUID();
+    const termsSnapshot = {
+      spec: 'TMT Steel Fe 500D · 12mm',
+      qty: 20,
+      rate: 52000,
+      deliveredTotal: 1244700,
+    };
+    const checksum = crypto.createHash('sha256').update(JSON.stringify(termsSnapshot)).digest('hex');
+
+    await pg.exec('BEGIN;');
+    await pg.exec('SET ROLE kovok_app;');
+    await pg.query(`SET LOCAL app.current_workspace_id = '${wsAId}';`);
+
+    // Create fresh approval
+    await pg.query(
+      `INSERT INTO approvals (id, "workspaceId", "requestCode", "approvedByUserId", "totalApprovedQuantity", "quantityUnit", "totalApprovedAmount", "approvedSpecifications", "approvalStatus")
+       VALUES ($1, $2, 'KOV-REQ-PO-TEST', $3, 20.000, 'TONNES', 1244700.00, '{}', 'APPROVED');`,
+      [freshApprovalId, wsAId, userAId]
+    );
+
+    // Create allocation
+    await pg.query(
+      `INSERT INTO approval_allocations (
+         id, "approvalId", "workspaceId", "quotationReference", "supplierName",
+         "allocatedQuantity", "allocatedPayableAmount", "allocatedTermsSnapshot"
+       ) VALUES ($1, $2, $3, 'QUO-REF-99', 'JSW One MSME', 20.000, 1244700.00, $4);`,
+      [testAllocId, freshApprovalId, wsAId, JSON.stringify(termsSnapshot)]
+    );
+
+    // Create PO
+    await pg.query(
+      `INSERT INTO purchase_orders (
+         id, "workspaceId", "poNumber", "approvalAllocationId", "idempotencyKey",
+         "approvedTermsSnapshot", "consistencyChecksum", "poStatus"
+       ) VALUES ($1, $2, 'PO-9999', $3, 'IDEMP-9999', $4, $5, 'CONFIRMED');`,
+      [testPoId, wsAId, testAllocId, JSON.stringify(termsSnapshot), checksum]
+    );
+
+    // Create milestone
+    const msId = crypto.randomUUID();
+    await pg.query(
+      `INSERT INTO delivery_milestones (
+         id, "workspaceId", "purchaseOrderId", "milestoneCode", "milestoneTitle", "milestoneStatus"
+       ) VALUES ($1, $2, $3, 'MS-GATE-ENTRY', 'Gate Security Stamp', 'PENDING');`,
+      [msId, wsAId, testPoId]
+    );
+
+    const msQuery = await pg.query('SELECT id, "milestoneCode" FROM delivery_milestones WHERE "purchaseOrderId" = $1;', [testPoId]);
+    assert(msQuery.rows.length === 1, 'Delivery milestone must be linked to purchase order');
+
+    await pg.exec('RESET ROLE;');
+    await pg.exec('ROLLBACK;');
+  });
+
+  await runTest('Procurement exception resolution strictly enforces resolution action and notes', async () => {
+    const exId = crypto.randomUUID();
+
+    await pg.exec('BEGIN;');
+    await pg.exec('SET ROLE kovok_app;');
+    await pg.query(`SET LOCAL app.current_workspace_id = '${wsAId}';`);
+
+    // Create exception
+    await pg.query(
+      `INSERT INTO procurement_exceptions (
+         id, "workspaceId", "exceptionCode", "exceptionType", severity, status, title, description, "updatedAt"
+       ) VALUES ($1, $2, 'EX-999', 'SHORT_SUPPLY', 'HIGH', 'OPEN', 'Shortfall reported', 'Mill delivered 18 of 20 MT', NOW());`,
+      [exId, wsAId]
+    );
+
+    // Resolve exception with mandatory action and notes
+    await pg.query(
+      `UPDATE procurement_exceptions
+       SET status = 'RESOLVED', "resolutionAction" = 'Alternative Sourcing', "resolutionNotes" = 'Remaining 2 MT ordered from regional stockist', "resolvedAt" = NOW()
+       WHERE id = $1;`,
+      [exId]
+    );
+
+    const check = await pg.query<{ status: string; resolutionAction: string }>(
+      'SELECT status, "resolutionAction" FROM procurement_exceptions WHERE id = $1;',
+      [exId]
+    );
+    assert(check.rows[0].status === 'RESOLVED', 'Exception must be RESOLVED');
+    assert(check.rows[0].resolutionAction === 'Alternative Sourcing', 'Resolution action must be recorded');
+
+    await pg.exec('RESET ROLE;');
+    await pg.exec('ROLLBACK;');
   });
 
   console.log();

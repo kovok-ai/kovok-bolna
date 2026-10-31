@@ -1,6 +1,21 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import {
+  Users,
+  Search,
+  Building2,
+  FileText,
+  ExternalLink,
+  ShieldCheck,
+  CheckCircle2,
+  AlertCircle,
+  X,
+  Phone,
+  Mail,
+  RefreshCw,
+  Plus,
+} from 'lucide-react';
 
 export interface SupplierListingItem {
   id: string;
@@ -329,12 +344,48 @@ export function SuppliersView({ onInitiateProcurement }: SuppliersViewProps) {
                 onClick={() => setSelectedSupplier(null)}
                 aria-label="Close supplier details"
               >
-                ×
+                <X size={16} />
               </button>
             </div>
 
             {/* Drawer Body (Scrollable) */}
             <div style={{ padding: '16px', overflowY: 'auto', flex: 1 }}>
+              {/* 4-Part Verification Taxonomy Audit */}
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px', marginBottom: '16px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: '8px' }}>
+                  Supplier Verification &amp; Evidence Audit
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', fontSize: '11.5px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span className={`pill ${selectedSupplier.verificationStatus === 'verified_organization' ? 'green' : 'amber'}`} style={{ padding: '2px 6px', fontSize: '10px' }}>
+                      {selectedSupplier.verificationStatus === 'verified_organization' ? 'Verified' : 'Pending'}
+                    </span>
+                    <span>1. Corporate identity verified</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span className={`pill ${selectedSupplier.verificationStatus === 'verified_organization' ? 'green' : 'amber'}`} style={{ padding: '2px 6px', fontSize: '10px' }}>
+                      {selectedSupplier.verificationStatus === 'verified_organization' ? 'Verified' : 'Candidate'}
+                    </span>
+                    <span>2. Manufacturer authorization verified</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span className="pill blue" style={{ padding: '2px 6px', fontSize: '10px' }}>
+                      Listing
+                    </span>
+                    <span>3. Product listing verified</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span className="pill gray" style={{ padding: '2px 6px', fontSize: '10px' }}>
+                      RFQ Required
+                    </span>
+                    <span>4. Live inventory confirmed</span>
+                  </div>
+                </div>
+                <p style={{ margin: '8px 0 0', fontSize: '10.5px', color: '#64748b' }}>
+                  Note: Supplier presence in the directory does not prove live inventory availability. Stock and mill availability are confirmed in real-time via quotation intake.
+                </p>
+              </div>
+
               {/* Organization Overview Card */}
               <div className="panel" style={{ padding: '16px', marginBottom: '16px' }}>
                 <div className="kv">
@@ -385,9 +436,9 @@ export function SuppliersView({ onInitiateProcurement }: SuppliersViewProps) {
                       href={selectedSupplier.websiteUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      style={{ color: '#1e40af', fontSize: '11.5px', fontWeight: 600 }}
+                      style={{ color: '#1e40af', fontSize: '11.5px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                     >
-                      Visit Website ↗
+                      Visit Website <ExternalLink size={12} />
                     </a>
                   </div>
                 )}
@@ -522,7 +573,9 @@ export function SuppliersView({ onInitiateProcurement }: SuppliersViewProps) {
                 <h2>Import Supplier Master</h2>
                 <p>Upload your existing construction distributor roster via CSV</p>
               </div>
-              <button className="icon-btn" onClick={() => setIsImportModalOpen(false)}>×</button>
+              <button className="icon-btn" onClick={() => setIsImportModalOpen(false)} aria-label="Close modal">
+                <X size={16} />
+              </button>
             </div>
             <div style={{ padding: '16px' }}>
               <div
@@ -535,7 +588,9 @@ export function SuppliersView({ onInitiateProcurement }: SuppliersViewProps) {
                   marginBottom: '16px',
                 }}
               >
-                <div style={{ fontSize: '24px', marginBottom: '8px' }}>📄</div>
+                <div style={{ marginBottom: '8px', color: '#1e40af' }}>
+                  <FileText size={32} style={{ margin: '0 auto' }} />
+                </div>
                 <strong style={{ fontSize: '13px', color: '#1e293b', display: 'block', marginBottom: '4px' }}>
                   Drop your Vendor Master CSV here
                 </strong>
@@ -596,7 +651,9 @@ export function SuppliersView({ onInitiateProcurement }: SuppliersViewProps) {
                   <h2>Register Vendor Candidate</h2>
                   <p>Add an approved distributor to your workspace directory</p>
                 </div>
-                <button type="button" className="icon-btn" onClick={() => setIsAddModalOpen(false)}>×</button>
+                <button type="button" className="icon-btn" onClick={() => setIsAddModalOpen(false)} aria-label="Close modal">
+                <X size={16} />
+              </button>
               </div>
               <div style={{ padding: '16px' }}>
                 <div className="field" style={{ marginBottom: '12px' }}>
