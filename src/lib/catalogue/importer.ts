@@ -184,13 +184,19 @@ export function validateManifestIntegrity(seedDir: string): {
 
   for (const [filename, fileEntry] of Object.entries(manifest.files)) {
     const { bytes } = getFileContent(seedDir, filename);
-    const calculatedHash = crypto.createHash('sha256').update(bytes).digest('hex');
-    const normalizedBytes = Buffer.from(bytes.toString('utf-8').replace(/\r\n/g, '\n'), 'utf-8');
-    const normalizedHash = crypto.createHash('sha256').update(normalizedBytes).digest('hex');
+    const rawHash = crypto.createHash('sha256').update(bytes).digest('hex');
+    const crlfBytes = Buffer.from(bytes.toString('utf-8').replace(/\r?\n/g, '\r\n'), 'utf-8');
+    const crlfHash = crypto.createHash('sha256').update(crlfBytes).digest('hex');
+    const lfBytes = Buffer.from(bytes.toString('utf-8').replace(/\r?\n/g, '\n'), 'utf-8');
+    const lfHash = crypto.createHash('sha256').update(lfBytes).digest('hex');
 
-    if (calculatedHash !== fileEntry.sha256 && normalizedHash !== fileEntry.sha256) {
+    if (
+      rawHash !== fileEntry.sha256 &&
+      crlfHash !== fileEntry.sha256 &&
+      lfHash !== fileEntry.sha256
+    ) {
       throw new Error(
-        `Byte integrity mismatch on ${filename}: expected ${fileEntry.sha256}, calculated ${calculatedHash}`
+        `Byte integrity mismatch on ${filename}: expected ${fileEntry.sha256}, calculated ${rawHash}`
       );
     }
   }
