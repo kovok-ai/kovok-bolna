@@ -37,6 +37,12 @@ import {
   generateCallbackToken,
   verifyCallbackToken,
   SARVAM_SUPPLIER_AGENT_PROMPT,
+  buildSarvamOutboundPayload,
+  initiateSarvamOutboundCall,
+  getSarvamEnvValue,
+  maskPhoneNumber,
+  isValidIndianPhone,
+  formatE164IndianPhone,
 } from '../src/lib/integrations/sarvam-voice';
 
 // ANSI terminal colors for clear test reporting
@@ -1309,6 +1315,260 @@ async function main() {
     assert(tokenHash.length === 64, 'Hash must be 64-char sha256');
     assert(verifyCallbackToken(token, tokenHash) === true, 'Matching token must verify');
     assert(verifyCallbackToken('invalid_tampered_token', tokenHash) === false, 'Tampered token must reject');
+  });
+
+  await runTest('maskPhoneNumber correctly redacts recipient digits and prevents phone leakage', () => {
+    assert(maskPhoneNumber('+919876543210') === '+91******3210', 'Masks +91 10-digit phone');
+    assert(maskPhoneNumber('9876543210') === '******3210', 'Masks raw 10-digit phone');
+    assert(maskPhoneNumber(null) === '[REDACTED]', 'Handles null safely');
+    assert(maskPhoneNumber(undefined) === '[REDACTED]', 'Handles undefined safely');
+    assert(maskPhoneNumber('') === '[REDACTED]', 'Handles empty string safely');
+    assert(maskPhoneNumber('123') === '***', 'Handles short strings without crashing');
+  });
+
+  await runTest('isValidIndianPhone and formatE164IndianPhone validate and normalize Indian numbers', () => {
+    assert(isValidIndianPhone('9876543210') === true, 'Valid 10-digit Indian number');
+    assert(isValidIndianPhone('+919876543210') === true, 'Valid E.164 +91 number');
+    assert(isValidIndianPhone('919876543210') === true, 'Valid 91-prefixed number');
+    assert(isValidIndianPhone('1234567890') === false, 'Invalid start digit (must start with 6-9)');
+    assert(isValidIndianPhone('98765') === false, 'Too short');
+    assert(isValidIndianPhone('abcdefghij') === false, 'Non-numeric');
+    assert(formatE164IndianPhone('9876543210') === '+919876543210', 'Formats 10-digit to E.164');
+    assert(formatE164IndianPhone('+919876543210') === '+919876543210', 'Preserves valid E.164');
+  });
+
+  await runTest('buildSarvamOutboundPayload constructs strictly conformant Sarvam payload with app_config and user_config', () => {
+    const origEnv = { ...process.env };
+    try {
+      process.env.SARVAM_AGENT_APP_ID = 'sarvam-test-agent-app';
+      process.env.SARVAM_AGENT_APP_VERSION = '1';
+      process.env.SARVAM_CONNECTION_ID = 'test-connection-jio-01';
+      process.env.SARVAM_AGENT_PHONE_NUMBER = '+911140001000';
+
+      const payload = buildSarvamOutboundPayload(
+        {
+          workspaceId: 'c2205513-bd9f-43b8-8096-7c089da369e0',
+          procurementRequestId: 'f93cb6fb-ec46-4cb2-8380-60b642ecfa48',
+          requestCode: 'KOV-REQ-0001',
+          supplierId: 'SUPP-JINDAL-DEALER',
+          supplierName: 'Jindal Steels & Alloys Ltd',
+          supplierPhone: '9876543210',
+          materialSpecification: 'TMT Steel Fe 500D 12mm',
+          targetQuantity: 20,
+          quantityUnit: 'TONNES',
+          deliverySiteName: 'Gurugram Tower B',
+          deliveryCity: 'Gurugram',
+          deliveryPinCode: '122002',
+          initiatedByUserId: 'f56860ef-94fa-4fc6-b7f1-8f557343e0e7',
+        },
+        'https://app.kovok.com/api/integrations/sarvam/webhook?call_token=testtoken123&request_code=KOV-REQ-0001'
+      );
+
+      // Verify app_config structure
+      assert(typeof payload.app_config === 'object' && payload.app_config !== null, 'app_config must be object');
+      assert(payload.app_config.app_id === 'sarvam-test-agent-app', 'app_id must match');
+      assert(payload.app_config.app_version === 1, 'app_version must be integer 1');
+      assert(typeof payload.app_config.app_version === 'number', 'app_version must be number');
+      assert(payload.app_config.connection_config.connection_id === 'test-connection-jio-01', 'connection_id must match');
+      assert(payload.app_config.connection_config.agent_phone_number === '+911140001000', 'agent_phone_number must be E.164');
+
+      // Verify user_config structure
+      assert(typeof payload.user_config === 'object' && payload.user_config !== null, 'user_config must be object');
+      assert(payload.user_config.user_phone_number === '+919876543210', 'user_phone_number must be formatted to E.164');
+      assert(payload.user_config.request_code === 'KOV-REQ-0001', 'request_code must match');
+      assert(payload.user_config.supplier_name === 'Jindal Steels & Alloys Ltd', 'supplier_name must match');
+      assert(payload.user_config.material_specification === 'TMT Steel Fe 500D 12mm', 'material_specification must match');
+      assert(payload.user_config.quantity === '20 TONNES', 'quantity must include unit');
+      assert(payload.user_config.destination.includes('Gurugram'), 'destination must include city');
+      assert(payload.user_config.quotation_fields_to_collect.includes('basic_rate_per_unit'), 'quotation_fields_to_collect required');
+
+      // Verify webhook_config
+      assert(payload.webhook_config?.url.includes('call_token=testtoken123'), 'webhook_config URL must match');
+
+      // Zero Leakage of Internal Buyer / DB Data Invariant
+      const serialized = JSON.stringify(payload);
+      assert(!serialized.includes('c2205513-bd9f-43b8-8096-7c089da369e0'), 'Must not leak buyer workspaceId');
+      assert(!serialized.includes('f93cb6fb-ec46-4cb2-8380-60b642ecfa48'), 'Must not leak procurementRequestId');
+      assert(!serialized.includes('f56860ef-94fa-4fc6-b7f1-8f557343e0e7'), 'Must not leak initiatedByUserId');
+      assert(!serialized.includes('SUPP-JINDAL-DEALER'), 'Must not leak supplierId');
+    } finally {
+      process.env = origEnv;
+    }
+  });
+
+  await runTest('buildSarvamOutboundPayload performs strict server-side validation and protects sensitive inputs', () => {
+    const origEnv = { ...process.env };
+    try {
+      process.env.SARVAM_AGENT_APP_ID = 'test-agent';
+      process.env.SARVAM_AGENT_APP_VERSION = '1';
+      process.env.SARVAM_CONNECTION_ID = 'test-conn';
+      process.env.SARVAM_AGENT_PHONE_NUMBER = '+911140001000';
+
+      const validBase = {
+        workspaceId: crypto.randomUUID(),
+        procurementRequestId: crypto.randomUUID(),
+        requestCode: 'KOV-REQ-0002',
+        supplierId: 'SUPP-1',
+        supplierName: 'UltraTech Cement Stockist',
+        supplierPhone: '9812345678',
+        materialSpecification: 'OPC 53 Cement',
+        targetQuantity: 500,
+        quantityUnit: 'BAGS',
+        deliverySiteName: 'Site 1',
+        deliveryCity: 'Noida',
+        deliveryPinCode: '201301',
+        initiatedByUserId: crypto.randomUUID(),
+      };
+
+      // 1. Rejects missing requestCode
+      let threwCode = false;
+      try {
+        buildSarvamOutboundPayload({ ...validBase, requestCode: '' });
+      } catch (e: any) {
+        threwCode = true;
+        assert(e.message.includes('procurement request code'), 'Error identifies missing code');
+      }
+      assert(threwCode, 'Must reject missing request code');
+
+      // 2. Rejects invalid quantity
+      let threwQty = false;
+      try {
+        buildSarvamOutboundPayload({ ...validBase, targetQuantity: 0 });
+      } catch (e: any) {
+        threwQty = true;
+        assert(e.message.includes('quantity'), 'Error identifies invalid quantity');
+      }
+      assert(threwQty, 'Must reject non-positive quantity');
+
+      // 3. Rejects invalid phone number and masks it in the error message
+      let threwPhone = false;
+      try {
+        buildSarvamOutboundPayload({ ...validBase, supplierPhone: '98123000' });
+      } catch (e: any) {
+        threwPhone = true;
+        // Verify phone is masked in error message (e.g. 98123000 should NOT appear unmasked)
+        assert(!e.message.includes('98123000'), 'Error message must NOT leak unmasked phone');
+        assert(e.message.includes('telephone number'), 'Error identifies invalid phone');
+      }
+      assert(threwPhone, 'Must reject invalid phone number');
+    } finally {
+      process.env = origEnv;
+    }
+  });
+
+  await runTest('initiateSarvamOutboundCall handles Sarvam 422 invalid parameter error gracefully without crashing or leaking secrets', async () => {
+    const origEnv = { ...process.env };
+    const origFetch = globalThis.fetch;
+    try {
+      process.env.SARVAM_VOICE_WORKSPACE_API_KEY = 'sk_test_workspace_key_mock_12345';
+      process.env.SARVAM_ORG_ID = 'test-org-uuid-001';
+      process.env.SARVAM_WORKSPACE_ID = 'test-workspace-uuid-001';
+      process.env.SARVAM_AGENT_APP_ID = 'sarvam-test-agent-app';
+      process.env.SARVAM_AGENT_APP_VERSION = '2';
+      process.env.SARVAM_CONNECTION_ID = 'test-connection-jio-01';
+      process.env.SARVAM_AGENT_PHONE_NUMBER = '+919811400010';
+      process.env.APP_BASE_URL = 'https://kovok-bolna-six.vercel.app';
+
+      // Mock Sarvam gateway returning HTTP 422 Invalid Parameter
+      let capturedPayload: any = null;
+      let capturedHeaders: any = null;
+      globalThis.fetch = (async (url: any, init: any) => {
+        capturedPayload = JSON.parse(init.body);
+        capturedHeaders = init.headers;
+        return {
+          ok: false,
+          status: 422,
+          text: async () => JSON.stringify({
+            type: 'invalid_parameter',
+            code: 422,
+            data: { details: { app_config: 'Field required; user_config: Field required' } }
+          }),
+        } as any;
+      }) as typeof fetch;
+
+      const result = await initiateSarvamOutboundCall({
+        workspaceId: crypto.randomUUID(),
+        procurementRequestId: crypto.randomUUID(),
+        requestCode: 'KOV-REQ-0001',
+        supplierId: 'SUPP-JINDAL-01',
+        supplierName: 'Jindal Steel Depot',
+        supplierPhone: '9876543210',
+        materialSpecification: 'TMT Steel Fe 550D 16mm',
+        targetQuantity: 35,
+        quantityUnit: 'TONNES',
+        deliverySiteName: 'Site Gamma',
+        deliveryCity: 'Gurugram',
+        deliveryPinCode: '122002',
+        initiatedByUserId: crypto.randomUUID(),
+      });
+
+      // Verification of outgoing payload captured by fetch
+      assert(capturedPayload !== null, 'Fetch must have been called with payload');
+      assert(typeof capturedPayload.app_config === 'object', 'app_config must be root object');
+      assert(typeof capturedPayload.user_config === 'object', 'user_config must be root object');
+      assert(capturedPayload.user_config.user_phone_number === '+919876543210', 'Phone normalized to E.164');
+      assert(capturedHeaders['X-API-Key'] === 'sk_test_workspace_key_mock_12345', 'Headers passed workspace key');
+
+      // Verification of 422 error response handling
+      assert(result.success === false, 'Result must report success: false');
+      assert(result.status === 'API_ERROR_422', 'Status must be API_ERROR_422');
+      assert(result.error?.includes('HTTP 422'), 'Error message must reflect HTTP 422');
+      assert(result.error?.includes('app_config'), 'Error message must detail Sarvam feedback');
+      assert(result.maskedRecipientPhone === '******3210', 'Masked recipient phone must not leak full number');
+    } finally {
+      process.env = origEnv;
+      globalThis.fetch = origFetch;
+    }
+  });
+
+  await runTest('initiateSarvamOutboundCall marks call QUEUED only when Sarvam confirms HTTP 200 with attempt_id', async () => {
+    const origEnv = { ...process.env };
+    const origFetch = globalThis.fetch;
+    try {
+      process.env.SARVAM_VOICE_WORKSPACE_API_KEY = 'sk_test_workspace_key_mock_12345';
+      process.env.SARVAM_ORG_ID = 'test-org-uuid-001';
+      process.env.SARVAM_WORKSPACE_ID = 'test-workspace-uuid-001';
+      process.env.SARVAM_AGENT_APP_ID = 'sarvam-test-agent-app';
+      process.env.SARVAM_AGENT_APP_VERSION = '2';
+      process.env.SARVAM_CONNECTION_ID = 'test-connection-jio-01';
+      process.env.SARVAM_AGENT_PHONE_NUMBER = '+919811400010';
+      process.env.APP_BASE_URL = 'https://kovok-bolna-six.vercel.app';
+
+      // Mock Sarvam gateway returning HTTP 200 OK with attempt_id
+      globalThis.fetch = (async () => {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            attempt_id: 'att_sarvam_verified_987654321',
+          }),
+        } as any;
+      }) as typeof fetch;
+
+      const result = await initiateSarvamOutboundCall({
+        workspaceId: crypto.randomUUID(),
+        procurementRequestId: crypto.randomUUID(),
+        requestCode: 'KOV-REQ-0002',
+        supplierId: 'SUPP-ULTRATECH-01',
+        supplierName: 'UltraTech Cement Authorized Dealer',
+        supplierPhone: '9811223344',
+        materialSpecification: 'OPC 53 Cement',
+        targetQuantity: 200,
+        quantityUnit: 'BAGS',
+        deliverySiteName: 'Site Delta',
+        deliveryCity: 'Noida',
+        deliveryPinCode: '201301',
+        initiatedByUserId: crypto.randomUUID(),
+      });
+
+      assert(result.success === true, 'Success must be true on 200 confirmation');
+      assert(result.status === 'QUEUED', 'Status must be QUEUED');
+      assert(result.attemptId === 'att_sarvam_verified_987654321', 'Must capture Sarvam attempt_id');
+      assert(result.maskedRecipientPhone === '******3344', 'Phone masked');
+    } finally {
+      process.env = origEnv;
+      globalThis.fetch = origFetch;
+    }
   });
 
   await runTest('Quotation persistence and cross-workspace RLS isolation', async () => {
