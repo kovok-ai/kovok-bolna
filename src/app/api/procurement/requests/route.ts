@@ -89,7 +89,24 @@ export async function POST(request: NextRequest) {
     if (error?.message?.includes('ProjectSite not found')) {
       return NextResponse.json({ error: error.message }, { status: 404 });
     }
+
+    const isUniqueConstraint =
+      error?.code === 'P2002' ||
+      error?.message?.includes('Unique constraint failed') ||
+      error?.message?.includes('procurement_requests_workspaceId_requestCode_key');
+
+    if (isUniqueConstraint) {
+      console.warn('Procurement request unique reference collision handled safely:', error?.message);
+      return NextResponse.json(
+        { error: 'A procurement request reference collision occurred. Please retry submitting your request.' },
+        { status: 409 }
+      );
+    }
+
     console.error('Failed to create procurement request:', error);
-    return NextResponse.json({ error: error?.message || 'Failed to create request' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Failed to create procurement request. Please try again.' },
+      { status: 500 }
+    );
   }
 }

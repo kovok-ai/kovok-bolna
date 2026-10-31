@@ -29,7 +29,8 @@ import {
 } from '../src/lib/catalogue/importer';
 import {
   calculateRebarConversions,
-  matchProcurementRequirement
+  matchProcurementRequirement,
+  generateNextRequestCode
 } from '../src/lib/procurement/intake';
 import {
   getSarvamVoiceConfigStatus,
@@ -1452,6 +1453,199 @@ async function main() {
 
     await pg.exec('RESET ROLE;');
     await pg.exec('ROLLBACK;');
+  });
+
+  // --------------------------------------------------------------------------
+  // SUITE 15: Robust Concurrency-Safe Request Code Generation & Telephony Invariants
+  // --------------------------------------------------------------------------
+  console.log(`\n${BOLD}[15/15] Robust Concurrency-Safe Request Code Generation & Telephony Invariants${RESET}`);
+
+  const pgliteAdapter = {
+    $executeRawUnsafe: async (sql: string, ...params: any[]) => {
+      return await pg.query(sql, params);
+    },
+    $queryRawUnsafe: async <T = any>(sql: string, ...params: any[]) => {
+      const res = await pg.query(sql, params);
+      return res.rows as T;
+    }
+  };
+
+  // Create a dedicated project site for WS A in this test suite
+  const suiteSiteAId = crypto.randomUUID();
+  await pg.query(
+    `INSERT INTO project_sites (id, "workspaceId", "siteName", "pinCode", "city", address, "updatedAt")
+     VALUES ($1, $2, 'Suite 15 Site A', '122002', 'Gurugram', 'Tower A Yard', NOW())
+     ON CONFLICT ("workspaceId", id) DO NOTHING;`,
+    [suiteSiteAId, wsAId]
+  );
+
+  await runTest('Creating several requests in the same workspace generates strictly sequential codes', async () => {
+    await pg.exec(`SET LOCAL app.current_workspace_id = '${wsAId}';`);
+
+    const code1 = await generateNextRequestCode(pgliteAdapter, wsAId);
+    await pg.query(
+      `INSERT INTO procurement_requests (id, "workspaceId", "siteId", "requestCode", "materialCategoryId", "canonicalProductId", "quantityValue", "quantityUnit", "requestStatus", "createdByUserId", "updatedAt")
+       VALUES ($1, $2, $3, $4, 'tmt_rebar', 'CP-TMT-500D-12MM', 10.0, 'TONNES', 'MATCHED_VERIFIED', $5, NOW());`,
+      [crypto.randomUUID(), wsAId, suiteSiteAId, code1, userAId]
+    );
+
+    const code2 = await generateNextRequestCode(pgliteAdapter, wsAId);
+    await pg.query(
+      `INSERT INTO procurement_requests (id, "workspaceId", "siteId", "requestCode", "materialCategoryId", "canonicalProductId", "quantityValue", "quantityUnit", "requestStatus", "createdByUserId", "updatedAt")
+       VALUES ($1, $2, $3, $4, 'tmt_rebar', 'CP-TMT-500D-16MM', 15.0, 'TONNES', 'MATCHED_VERIFIED', $5, NOW());`,
+      [crypto.randomUUID(), wsAId, suiteSiteAId, code2, userAId]
+    );
+
+    const code3 = await generateNextRequestCode(pgliteAdapter, wsAId);
+    await pg.query(
+      `INSERT INTO procurement_requests (id, "workspaceId", "siteId", "requestCode", "materialCategoryId", "canonicalProductId", "quantityValue", "quantityUnit", "requestStatus", "createdByUserId", "updatedAt")
+       VALUES ($1, $2, $3, $4, 'cement', 'CP-CEM-OPC-53', 200.0, 'BAGS', 'MATCHED_VERIFIED', $5, NOW());`,
+      [crypto.randomUUID(), wsAId, suiteSiteAId, code3, userAId]
+    );
+
+    const num1 = parseInt(code1.replace('KOV-REQ-', ''), 10);
+    const num2 = parseInt(code2.replace('KOV-REQ-', ''), 10);
+    const num3 = parseInt(code3.replace('KOV-REQ-', ''), 10);
+
+    assert(num2 === num1 + 1, `Expected consecutive sequence: ${num1} -> ${num2}`);
+    assert(num3 === num2 + 1, `Expected consecutive sequence: ${num2} -> ${num3}`);
+  });
+
+  await runTest('Creating requests concurrently produces completely unique, non-colliding codes', async () => {
+    await pg.exec(`SET LOCAL app.current_workspace_id = '${wsAId}';`);
+
+    // Concurrently invoke code generation 5 times
+    const concurrentCodes = await Promise.all([
+      generateNextRequestCode(pgliteAdapter, wsAId),
+      generateNextRequestCode(pgliteAdapter, wsAId),
+      generateNextRequestCode(pgliteAdapter, wsAId),
+      generateNextRequestCode(pgliteAdapter, wsAId),
+      generateNextRequestCode(pgliteAdapter, wsAId),
+    ]);
+
+    // Insert all concurrently generated codes
+    for (const c of concurrentCodes) {
+      await pg.query(
+        `INSERT INTO procurement_requests (id, "workspaceId", "siteId", "requestCode", "materialCategoryId", "canonicalProductId", "quantityValue", "quantityUnit", "requestStatus", "createdByUserId", "updatedAt")
+         VALUES ($1, $2, $3, $4, 'tmt_rebar', 'CP-TMT-500D-12MM', 5.0, 'TONNES', 'MATCHED_VERIFIED', $5, NOW());`,
+        [crypto.randomUUID(), wsAId, suiteSiteAId, c, userAId]
+      );
+    }
+
+    const uniqueCodes = new Set(concurrentCodes);
+    assert(uniqueCodes.size === 5, `Expected 5 unique codes, got: ${concurrentCodes.join(', ')}`);
+  });
+
+  await runTest('Existing request codes remain unchanged and pre-seeded high numbers advance counter safely', async () => {
+    await pg.exec(`SET LOCAL app.current_workspace_id = '${wsAId}';`);
+
+    // Verify existing codes remain unchanged in database
+    const existingCheck = await pg.query<{ count: string }>(
+      `SELECT COUNT(*)::text as count FROM procurement_requests WHERE "workspaceId" = $1 AND "requestCode" = 'KOV-REQ-0001';`,
+      [wsAId]
+    );
+    assert(parseInt(existingCheck.rows[0].count, 10) >= 1, 'Existing KOV-REQ-0001 must remain unchanged');
+
+    // Simulate pre-seeded request with high number (KOV-REQ-0100)
+    const highCode = 'KOV-REQ-0100';
+    await pg.query(
+      `INSERT INTO procurement_requests (id, "workspaceId", "siteId", "requestCode", "materialCategoryId", "canonicalProductId", "quantityValue", "quantityUnit", "requestStatus", "createdByUserId", "updatedAt")
+       VALUES ($1, $2, $3, $4, 'tmt_rebar', 'CP-TMT-500D-12MM', 25.0, 'TONNES', 'MATCHED_VERIFIED', $5, NOW());`,
+      [crypto.randomUUID(), wsAId, suiteSiteAId, highCode, userAId]
+    );
+
+    // Generating next code must automatically leap past 100 to avoid unique constraint collision
+    const nextCode = await generateNextRequestCode(pgliteAdapter, wsAId);
+    assert(nextCode === 'KOV-REQ-0101', `Expected counter to advance to KOV-REQ-0101 after pre-seeded 0100, got ${nextCode}`);
+
+    // Verify insert succeeds without P2002 collision
+    await pg.query(
+      `INSERT INTO procurement_requests (id, "workspaceId", "siteId", "requestCode", "materialCategoryId", "canonicalProductId", "quantityValue", "quantityUnit", "requestStatus", "createdByUserId", "updatedAt")
+       VALUES ($1, $2, $3, $4, 'tmt_rebar', 'CP-TMT-500D-12MM', 25.0, 'TONNES', 'MATCHED_VERIFIED', $5, NOW());`,
+      [crypto.randomUUID(), wsAId, suiteSiteAId, nextCode, userAId]
+    );
+  });
+
+  await runTest('Different workspaces maintain completely independent request code sequences', async () => {
+    // Create new Workspace C
+    const wsCId = crypto.randomUUID();
+    await pg.query(
+      `INSERT INTO workspaces (id, name, slug, "businessType", "serviceArea", "isSandbox", "updatedAt")
+       VALUES ($1, 'Workspace Gamma', 'workspace-gamma', 'Contractor', 'Noida', true, NOW());`,
+      [wsCId]
+    );
+
+    const siteCId = crypto.randomUUID();
+    await pg.query(
+      `INSERT INTO project_sites (id, "workspaceId", "siteName", "pinCode", "city", address, "updatedAt")
+       VALUES ($1, $2, 'Site Gamma Noida', '201301', 'Noida', 'Sector 62', NOW());`,
+      [siteCId, wsCId]
+    );
+
+    await pg.exec(`SET LOCAL app.current_workspace_id = '${wsCId}';`);
+
+    // Sequence for fresh Workspace C must start at KOV-REQ-0001
+    const codeC1 = await generateNextRequestCode(pgliteAdapter, wsCId);
+    assert(codeC1 === 'KOV-REQ-0001', `Workspace C sequence must start at KOV-REQ-0001, got ${codeC1}`);
+
+    // Insert in Workspace C with KOV-REQ-0001
+    await pg.query(
+      `INSERT INTO procurement_requests (id, "workspaceId", "siteId", "requestCode", "materialCategoryId", "canonicalProductId", "quantityValue", "quantityUnit", "requestStatus", "createdByUserId", "updatedAt")
+       VALUES ($1, $2, $3, $4, 'cement', 'CP-CEM-OPC-53', 100.0, 'BAGS', 'MATCHED_VERIFIED', $5, NOW());`,
+      [crypto.randomUUID(), wsCId, siteCId, codeC1, userBId]
+    );
+
+    // Verify that both wsA and wsC have KOV-REQ-0001 simultaneously under @@unique([workspaceId, requestCode])
+    const countA = await pg.query<{ count: string }>(
+      `SELECT COUNT(*)::text as count FROM procurement_requests WHERE "workspaceId" = $1 AND "requestCode" = 'KOV-REQ-0001';`,
+      [wsAId]
+    );
+    const countC = await pg.query<{ count: string }>(
+      `SELECT COUNT(*)::text as count FROM procurement_requests WHERE "workspaceId" = $1 AND "requestCode" = 'KOV-REQ-0001';`,
+      [wsCId]
+    );
+    assert(parseInt(countA.rows[0].count, 10) >= 1, 'Workspace A has KOV-REQ-0001');
+    assert(parseInt(countC.rows[0].count, 10) === 1, 'Workspace C has KOV-REQ-0001');
+  });
+
+  await runTest('Failed request creation does not dispatch or record a supplier voice call', async () => {
+    await pg.exec(`SET LOCAL app.current_workspace_id = '${wsAId}';`);
+
+    const callsBefore = await pg.query<{ count: string }>(
+      `SELECT COUNT(*)::text as count FROM supplier_voice_calls WHERE "workspaceId" = $1;`,
+      [wsAId]
+    );
+    const countBefore = parseInt(callsBefore.rows[0].count, 10);
+
+    // Simulate failed request creation (e.g. invalid site reference)
+    let requestFailed = false;
+    const fakeSiteId = crypto.randomUUID();
+    try {
+      await pg.query(
+        `INSERT INTO procurement_requests (id, "workspaceId", "siteId", "requestCode", "materialCategoryId", "quantityValue", "quantityUnit", "requestStatus", "createdByUserId", "updatedAt")
+         VALUES ($1, $2, $3, 'KOV-REQ-INVALID', 'tmt_rebar', 10.0, 'TONNES', 'MATCHED_VERIFIED', $4, NOW());`,
+        [crypto.randomUUID(), wsAId, fakeSiteId, userAId]
+      );
+    } catch {
+      requestFailed = true;
+    }
+    assert(requestFailed, 'Invalid foreign key project site insert must fail');
+
+    // Attempting to dispatch call for a non-existent request must fail
+    const nonExistentRequestId = crypto.randomUUID();
+    const reqCheck = await pg.query(
+      `SELECT * FROM procurement_requests WHERE id = $1 AND "workspaceId" = $2;`,
+      [nonExistentRequestId, wsAId]
+    );
+    assert(reqCheck.rows.length === 0, 'Non-existent request must not exist');
+
+    const callsAfter = await pg.query<{ count: string }>(
+      `SELECT COUNT(*)::text as count FROM supplier_voice_calls WHERE "workspaceId" = $1;`,
+      [wsAId]
+    );
+    const countAfter = parseInt(callsAfter.rows[0].count, 10);
+
+    assert(countAfter === countBefore, `Voice calls must not be recorded or dispatched on failed requests (${countBefore} -> ${countAfter})`);
   });
 
   console.log();

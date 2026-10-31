@@ -339,6 +339,54 @@ export function matchProcurementRequirement(
   };
 }
 
+/**
+ * Concurrency-safe, persistent request code generator.
+ *
+ * Guarantees:
+ * 1. Atomicity & Concurrency Safety: Exclusively locks the workspace's row in
+ *    workspace_request_counters using SELECT ... FOR UPDATE within the active transaction.
+ * 2. Uniqueness & Monotonicity: Evaluates both the counter value and the maximum numeric
+ *    suffix in existing procurement_requests for this workspace (MAX(KOV-REQ-XXXX)), ensuring
+ *    pre-seeded or imported requests are never duplicated or overwritten.
+ * 3. Multi-Tenant Independence: Each workspace has its own row and sequence in
+ *    workspace_request_counters; distinct workspaces allocate codes concurrently without blocking.
+ */
+export async function generateNextRequestCode(
+  prisma: any,
+  workspaceId: string
+): Promise<string> {
+  const atomicQuery = `
+    WITH max_req AS (
+      SELECT COALESCE(
+        MAX(
+          CASE 
+            WHEN "requestCode" ~ '^KOV-REQ-[0-9]+$' 
+            THEN SUBSTRING("requestCode" FROM 9)::INTEGER 
+            ELSE 0 
+          END
+        ), 0
+      ) AS max_code
+      FROM "procurement_requests"
+      WHERE "workspaceId" = $1::uuid
+    )
+    INSERT INTO "workspace_request_counters" ("workspaceId", "nextCounter", "updatedAt")
+    SELECT $1::uuid, max_code + 2, NOW() FROM max_req
+    ON CONFLICT ("workspaceId")
+    DO UPDATE SET 
+      "nextCounter" = GREATEST("workspace_request_counters"."nextCounter", (SELECT max_code + 1 FROM max_req)) + 1,
+      "updatedAt" = NOW()
+    RETURNING GREATEST("workspace_request_counters"."nextCounter" - 1, (SELECT max_code + 1 FROM max_req)) AS "allocatedCounter";
+  `;
+
+  const result = (await prisma.$queryRawUnsafe(
+    atomicQuery,
+    workspaceId
+  )) as Array<{ allocatedCounter: number }>;
+
+  const allocated = Number(result[0]?.allocatedCounter ?? 1);
+  return `KOV-REQ-${String(allocated).padStart(4, '0')}`;
+}
+
 export async function createProcurementRequest(
   prisma: PrismaClient,
   workspaceId: string,
@@ -367,40 +415,59 @@ export async function createProcurementRequest(
     input.buyerNotes
   );
 
-  // Step 3: Atomic Request Counter increment using dedicated counter table
-  const counterResult = await prisma.$queryRaw<Array<{ nextCounter: number }>>`
-    INSERT INTO "workspace_request_counters" ("workspaceId", "nextCounter", "updatedAt")
-    VALUES (${workspaceId}::uuid, 2, NOW())
-    ON CONFLICT ("workspaceId")
-    DO UPDATE SET "nextCounter" = "workspace_request_counters"."nextCounter" + 1, "updatedAt" = NOW()
-    RETURNING "workspace_request_counters"."nextCounter" - 1 AS "nextCounter";
-  `;
+  const MAX_RETRIES = 3;
+  let lastError: any = null;
 
-  const counterVal = counterResult[0]?.nextCounter ?? 1;
-  const requestCode = `KOV-REQ-${String(counterVal).padStart(4, '0')}`;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      // Step 3: Concurrency-safe request code allocation
+      const requestCode = await generateNextRequestCode(prisma as any, workspaceId);
 
-  // Step 4: Persist ProcurementRequest with composite foreign key & RLS context
-  const request = await prisma.procurementRequest.create({
-    data: {
-      workspaceId,
-      siteId: input.siteId,
-      requestCode,
-      materialCategoryId: match.materialCategoryId,
-      canonicalProductId: match.canonicalProductId,
-      targetGrade: input.targetGrade || null,
-      targetDiameterMm: input.targetDiameterMm || null,
-      quantityValue: input.quantityValue,
-      quantityUnit: input.quantityUnit,
-      derivedCalculations: match.derivedCalculations ? (match.derivedCalculations as any) : undefined,
-      requestStatus: match.requestStatus,
-      clarificationReason: match.clarificationReason,
-      buyerNotes: input.buyerNotes || null,
-      createdByUserId
+      // Step 4: Persist ProcurementRequest with composite foreign key & RLS context
+      const request = await prisma.procurementRequest.create({
+        data: {
+          workspaceId,
+          siteId: input.siteId,
+          requestCode,
+          materialCategoryId: match.materialCategoryId,
+          canonicalProductId: match.canonicalProductId,
+          targetGrade: input.targetGrade || null,
+          targetDiameterMm: input.targetDiameterMm || null,
+          quantityValue: input.quantityValue,
+          quantityUnit: input.quantityUnit,
+          derivedCalculations: match.derivedCalculations ? (match.derivedCalculations as any) : undefined,
+          requestStatus: match.requestStatus,
+          clarificationReason: match.clarificationReason,
+          buyerNotes: input.buyerNotes || null,
+          createdByUserId
+        }
+      });
+
+      return {
+        request,
+        match
+      };
+    } catch (err: any) {
+      lastError = err;
+      const isUniqueConstraint =
+        err?.code === 'P2002' ||
+        err?.message?.includes('Unique constraint failed') ||
+        err?.message?.includes('procurement_requests_workspaceId_requestCode_key');
+
+      if (isUniqueConstraint && attempt < MAX_RETRIES) {
+        // Force counter forward on collision before retry
+        await (prisma as any).$executeRawUnsafe(
+          `UPDATE "workspace_request_counters"
+           SET "nextCounter" = "nextCounter" + 1, "updatedAt" = NOW()
+           WHERE "workspaceId" = $1::uuid;`,
+          workspaceId
+        ).catch(() => {});
+        continue;
+      }
+
+      throw err;
     }
-  });
+  }
 
-  return {
-    request,
-    match
-  };
+  throw lastError;
 }

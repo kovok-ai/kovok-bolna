@@ -15,6 +15,7 @@
 import * as crypto from 'crypto';
 import * as process from 'node:process';
 import { PrismaClient } from '@prisma/client';
+import { generateNextRequestCode } from '../src/lib/procurement/intake';
 
 // Automatically load project .env if present
 try {
@@ -369,17 +370,8 @@ async function main() {
         return client.$transaction(async (tx) => {
           await tx.$executeRawUnsafe(`SET LOCAL app.current_workspace_id = '${wsAId}';`);
 
-          // Row-level conflict locking atomic counter allocation
-          const res = await tx.$queryRawUnsafe<Array<{ nextCounter: number }>>(`
-            INSERT INTO "workspace_request_counters" ("workspaceId", "nextCounter", "updatedAt")
-            VALUES ('${wsAId}'::uuid, 2, NOW())
-            ON CONFLICT ("workspaceId")
-            DO UPDATE SET "nextCounter" = "workspace_request_counters"."nextCounter" + 1, "updatedAt" = NOW()
-            RETURNING "workspace_request_counters"."nextCounter" - 1 AS "nextCounter";
-          `);
-
-          const counterVal = res[0].nextCounter;
-          const code = `KOV-REQ-${String(counterVal).padStart(4, '0')}`;
+          // Concurrency-safe, persistent request code allocation
+          const code = await generateNextRequestCode(tx, wsAId);
           generatedCodes.push(code);
 
           await tx.$executeRawUnsafe(
@@ -415,14 +407,7 @@ async function main() {
         bClients.map((client) => {
           return client.$transaction(async (tx) => {
             await tx.$executeRawUnsafe(`SET LOCAL app.current_workspace_id = '${wsBId}';`);
-            const res = await tx.$queryRawUnsafe<Array<{ nextCounter: number }>>(`
-              INSERT INTO "workspace_request_counters" ("workspaceId", "nextCounter", "updatedAt")
-              VALUES ('${wsBId}'::uuid, 2, NOW())
-              ON CONFLICT ("workspaceId")
-              DO UPDATE SET "nextCounter" = "workspace_request_counters"."nextCounter" + 1, "updatedAt" = NOW()
-              RETURNING "workspace_request_counters"."nextCounter" - 1 AS "nextCounter";
-            `);
-            const code = `KOV-REQ-${String(res[0].nextCounter).padStart(4, '0')}`;
+            const code = await generateNextRequestCode(tx, wsBId);
             bCodes.push(code);
             await tx.$executeRawUnsafe(
               `INSERT INTO procurement_requests (id, "workspaceId", "siteId", "requestCode", "materialCategoryId", "quantityValue", "quantityUnit", "requestStatus", "createdByUserId", "updatedAt")
