@@ -5,7 +5,7 @@
   "description": "Production-grade AI procurement operations platform for Indian construction materials",
   "scripts": {
     "dev": "next dev",
-    "build": "tsx scripts/deploy_production_migrations.ts && prisma generate && next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
     "postinstall": "prisma generate",

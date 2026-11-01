@@ -6,8 +6,8 @@ async function main() {
     process.env.DIRECT_URL = process.env.DATABASE_URL;
   }
   const dbUrl = process.env.DIRECT_URL || process.env.DATABASE_URL;
-  if (!dbUrl) {
-    console.log('[Deploy Migrations] No DATABASE_URL or DIRECT_URL set. Skipping migrations.');
+  if (!dbUrl || dbUrl === '[SENSITIVE]' || (!dbUrl.startsWith('postgresql://') && !dbUrl.startsWith('postgres://'))) {
+    console.log('[Deploy Migrations] No valid DATABASE_URL or DIRECT_URL set. Skipping migrations.');
     return;
   }
 
